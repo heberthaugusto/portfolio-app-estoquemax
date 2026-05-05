@@ -230,10 +230,11 @@
   <div class="not-found-banner" id="not-found-banner">
     <div class="nf-title">⚠️ Produto não cadastrado</div>
     <div class="nf-code" id="nf-code"></div>
-    <div class="nf-msg">Este código de barras não existe no catálogo. Deseja cadastrá-lo agora?</div>
-    <div class="flex gap-8">
+    <div class="nf-msg">Este código de barras não existe no catálogo. O que deseja fazer?</div>
+    <div class="flex gap-8" style="flex-wrap:wrap">
+      <button class="btn btn-primary btn-sm flex-1" onclick="countWithoutCatalog()">📋 Contar assim mesmo</button>
       <button class="btn btn-warn btn-sm flex-1" onclick="registerFromNotFound()">➕ Cadastrar Agora</button>
-      <button class="btn btn-secondary btn-sm" onclick="hideNotFound()">Ignorar</button>
+      <button class="btn btn-secondary btn-sm" style="width:100%" onclick="hideNotFound()">Ignorar</button>
     </div>
   </div>
 
@@ -758,6 +759,22 @@ function hideNotFound() {
   notFoundCode = null;
 }
 
+function countWithoutCatalog() {
+  // Create a temporary virtual product using the barcode as identifier
+  const code = notFoundCode;
+  document.getElementById('not-found-banner').classList.remove('show');
+  document.getElementById('scan-cta').style.display = 'none';
+  document.getElementById('found-icon').textContent    = '❓';
+  document.getElementById('found-name').textContent    = `Código: ${code}`;
+  document.getElementById('found-barcode').textContent = '(sem cadastro no catálogo)';
+  document.getElementById('count-expiry').value = '';
+  document.getElementById('count-qty').value    = 1;
+  document.getElementById('count-form-area').style.display = 'block';
+  // Signal that this is an uncatalogued product
+  countProduct = { id: '__nf__' + code, barcode: code, name: `Código: ${code}`, category: '', unit: 'un', _uncatalogued: true };
+  notFoundCode = null;
+}
+
 function registerFromNotFound() {
   const code = notFoundCode;
   hideNotFound();
@@ -772,15 +789,33 @@ function addCountEntry() {
   const expiry = document.getElementById('count-expiry').value;
   const qty    = parseInt(document.getElementById('count-qty').value) || 1;
   if (!expiry) { showToast('Informe a data de validade!', 'error'); return; }
-  const existing = db.entries.find(e => e.productId === countProduct.id && e.expiry === expiry);
-  if (existing) { existing.qty += qty; showToast('Quantidade somada ✓', 'success'); }
-  else {
-    db.entries.push({ id: Date.now().toString(), productId: countProduct.id, expiry, qty, addedAt: new Date().toISOString() });
-    showToast(`${countProduct.name} adicionado ✓`, 'success');
+
+  if (countProduct._uncatalogued) {
+    // Save as uncatalogued entry: store directly with barcode as productId marker
+    const existing = db.entries.find(e => e.productId === countProduct.id && e.expiry === expiry);
+    if (existing) { existing.qty += qty; showToast('Quantidade somada ✓', 'success'); }
+    else {
+      db.entries.push({
+        id: Date.now().toString(),
+        productId: countProduct.id,
+        barcode: countProduct.barcode,
+        name: countProduct.name,
+        expiry, qty,
+        addedAt: new Date().toISOString(),
+        _uncatalogued: true
+      });
+      showToast(`Lançado sem cadastro ✓`, 'success');
+    }
+  } else {
+    const existing = db.entries.find(e => e.productId === countProduct.id && e.expiry === expiry);
+    if (existing) { existing.qty += qty; showToast('Quantidade somada ✓', 'success'); }
+    else {
+      db.entries.push({ id: Date.now().toString(), productId: countProduct.id, expiry, qty, addedAt: new Date().toISOString() });
+      showToast(`${countProduct.name} adicionado ✓`, 'success');
+    }
   }
   save(); updateStats(); renderCountList();
   resetCountUI();
-  // auto-open scanner for next item
   setTimeout(() => openCountScanner(), 600);
 }
 
@@ -795,9 +830,19 @@ function renderCountList() {
   hdr.style.display = recent.length ? 'block' : 'none';
   if (!recent.length) { list.innerHTML = ''; return; }
   list.innerHTML = recent.map(e => {
+    const st = expStatus(e.expiry);
+    if (e._uncatalogued) {
+      return `<div class="count-item" style="border-color:var(--warn)">
+        <div class="count-icon">❓</div>
+        <div class="count-info">
+          <div class="count-name" style="color:var(--warn)">${e.barcode}</div>
+          <div class="count-detail">Sem cadastro · Val: ${fmtDate(e.expiry)}&nbsp;<span class="etag ${st.cls}" style="padding:1px 6px">${st.label}</span></div>
+        </div>
+        <div class="count-qty">${e.qty}<span style="font-size:10px;color:var(--muted);font-family:inherit">&nbsp;un</span></div>
+      </div>`;
+    }
     const prod = db.catalog.find(p => p.id === e.productId);
     if (!prod) return '';
-    const st = expStatus(e.expiry);
     return `<div class="count-item">
       <div class="count-icon">${catEmoji(prod.category)}</div>
       <div class="count-info">
@@ -900,7 +945,12 @@ function buildReport() {
   lines.push(`Gerado em: ${now.toLocaleString('pt-BR')}`);
   lines.push('─'.repeat(54));
   const withE = db.catalog.filter(p => db.entries.some(e => e.productId === p.id));
-  if (!withE.length) { document.getElementById('report-preview').textContent = 'Nenhum lançamento de estoque registrado.'; return; }
+  const uncatalogued = db.entries.filter(e => e._uncatalogued);
+
+  if (!withE.length && !uncatalogued.length) {
+    document.getElementById('report-preview').textContent = 'Nenhum lançamento de estoque registrado.'; return;
+  }
+
   withE.forEach(p => {
     const ents = db.entries.filter(e => e.productId === p.id);
     const total = ents.reduce((s,e) => s + e.qty, 0);
@@ -912,20 +962,36 @@ function buildReport() {
       lines.push(`  · Validade: ${fmtDate(e.expiry)}  →  ${e.qty} ${p.unit||'un'}${flag}`);
     });
   });
+
+  if (uncatalogued.length) {
+    lines.push(`\n${'─'.repeat(54)}`);
+    lines.push('⚠ PRODUTOS SEM CADASTRO');
+    uncatalogued.forEach(e => {
+      const st = expStatus(e.expiry);
+      const flag = st.cls === 'etag-exp' ? '  ⚠ VENCIDO' : st.cls === 'etag-warn' ? '  ⚡ A VENCER' : '';
+      lines.push(`\n▸ Código: ${e.barcode}`);
+      lines.push(`  · Validade: ${fmtDate(e.expiry)}  →  ${e.qty} un${flag}`);
+    });
+  }
+
   lines.push('\n' + '─'.repeat(54));
   lines.push(`PRODUTOS COM ESTOQUE: ${withE.length}`);
+  lines.push(`PRODUTOS SEM CADASTRO: ${[...new Set(uncatalogued.map(e=>e.barcode))].length}`);
   lines.push(`TOTAL DE UNIDADES: ${db.entries.reduce((s,e)=>s+e.qty,0)}`);
   document.getElementById('report-preview').textContent = lines.join('\n');
 }
 
 function getCSVContent() {
-  const rows = [['Produto','Código de Barras','Categoria','Unidade','Data de Validade','Quantidade']];
+  const rows = [['Produto','Código de Barras','Categoria','Unidade','Data de Validade','Quantidade','Observação']];
   db.catalog.forEach(p => {
     const ents = db.entries.filter(e => e.productId === p.id);
     if (!ents.length) return;
     ents.sort((a,b) => a.expiry.localeCompare(b.expiry)).forEach(e => {
-      rows.push([p.name, p.barcode, p.category||'', p.unit||'un', fmtDate(e.expiry), e.qty]);
+      rows.push([p.name, p.barcode, p.category||'', p.unit||'un', fmtDate(e.expiry), e.qty, '']);
     });
+  });
+  db.entries.filter(e => e._uncatalogued).forEach(e => {
+    rows.push(['SEM CADASTRO', e.barcode, '', 'un', fmtDate(e.expiry), e.qty, 'Produto não cadastrado no catálogo']);
   });
   return '\uFEFF' + rows.map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
 }
