@@ -805,7 +805,9 @@ function onScan(code) {
   if (prod) {
     showFoundProduct(prod);
   } else {
-    showNotFound(code);
+    // Produto não cadastrado: abre direto o formulário de contagem
+    notFoundCode = code;
+    countWithoutCatalog();
   }
 }
 
