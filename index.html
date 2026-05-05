@@ -542,19 +542,84 @@
 
 <script>
 // ══════════════════════ STATE ══════════════════════
-let db = JSON.parse(localStorage.getItem('estoquemax_v2') || '{"catalog":[],"entries":[]}');
-// catalog: [{id, barcode, name, category, unit, source}]
-// entries: [{id, productId, expiry, qty, addedAt}]
+// catalog stored in IndexedDB (large), entries in localStorage (small)
+let db = { catalog: [], entries: [] };
+let idb = null; // IndexedDB instance
 
 let scanner = null;
-let scannerMode = null; // 'count' | 'barcode-product'
+let scannerMode = null;
 let countProduct = null;
 let notFoundCode = null;
-let catalogFilter = 'all';
 let pendingImport = [];
 let searchVisible = false;
 
-function save() { localStorage.setItem('estoquemax_v2', JSON.stringify(db)); }
+// ══════════════════════ INDEXEDDB ══════════════════════
+function openIDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open('estoquemax', 2);
+    req.onupgradeneeded = e => {
+      const d = e.target.result;
+      if (!d.objectStoreNames.contains('catalog')) {
+        d.createObjectStore('catalog', { keyPath: 'id' });
+      }
+    };
+    req.onsuccess = e => resolve(e.target.result);
+    req.onerror   = e => reject(e.target.error);
+  });
+}
+
+async function loadCatalogFromIDB() {
+  return new Promise((resolve, reject) => {
+    const tx = idb.transaction('catalog', 'readonly');
+    const req = tx.objectStore('catalog').getAll();
+    req.onsuccess = e => resolve(e.target.result);
+    req.onerror   = e => reject(e.target.error);
+  });
+}
+
+async function saveCatalogToIDB(items) {
+  return new Promise((resolve, reject) => {
+    const tx = idb.transaction('catalog', 'readwrite');
+    const store = tx.objectStore('catalog');
+    items.forEach(p => store.put(p));
+    tx.oncomplete = resolve;
+    tx.onerror    = e => reject(e.target.error);
+  });
+}
+
+async function clearCatalogIDB() {
+  return new Promise((resolve, reject) => {
+    const tx = idb.transaction('catalog', 'readwrite');
+    tx.objectStore('catalog').clear();
+    tx.oncomplete = resolve;
+    tx.onerror    = e => reject(e.target.error);
+  });
+}
+
+async function deleteFromIDB(id) {
+  return new Promise((resolve, reject) => {
+    const tx = idb.transaction('catalog', 'readwrite');
+    tx.objectStore('catalog').delete(id);
+    tx.oncomplete = resolve;
+    tx.onerror    = e => reject(e.target.error);
+  });
+}
+
+function saveEntries() {
+  try {
+    localStorage.setItem('estoquemax_entries', JSON.stringify(db.entries));
+  } catch(e) {
+    showToast('Erro ao salvar lançamentos!', 'error');
+  }
+}
+
+// save() called after catalog changes — saves one product or array
+async function saveCatalogItem(item) {
+  await saveCatalogToIDB(Array.isArray(item) ? item : [item]);
+}
+
+// Legacy full save (for entries only now)
+function save() { saveEntries(); }
 
 // ══════════════════════ UTILS ══════════════════════
 // Normalize barcode: strip leading zeros for comparison
@@ -718,7 +783,7 @@ function editProduct(id) {
   openModal('product-modal');
 }
 
-function saveProduct() {
+async function saveProduct() {
   const barcode  = document.getElementById('p-barcode').value.trim();
   const name     = document.getElementById('p-name').value.trim();
   const sku      = document.getElementById('p-sku').value.trim();
@@ -728,26 +793,33 @@ function saveProduct() {
   if (!barcode || !name) { showToast('Preencha código e nome!', 'error'); return; }
   if (editId) {
     const p = db.catalog.find(x => x.id === editId);
-    if (p) Object.assign(p, { barcode, name, sku, category, unit });
+    if (p) {
+      Object.assign(p, { barcode, name, sku, category, unit });
+      await saveCatalogItem(p);
+    }
     showToast('Produto atualizado ✓', 'success');
   } else {
     if (findProduct(barcode)) { showToast('Código já cadastrado!', 'error'); return; }
-    db.catalog.push({ id: Date.now().toString(), barcode, name, sku, category, unit, source:'manual' });
+    const item = { id: Date.now().toString(), barcode, name, sku, category, unit, source:'manual' };
+    db.catalog.push(item);
+    await saveCatalogItem(item);
     showToast('Produto cadastrado ✓', 'success');
   }
-  save(); closeModal('product-modal'); renderCatalog(); updateStats();
+  closeModal('product-modal'); renderCatalog(); updateStats();
 }
 
-function delProduct(id) {
+async function delProduct(id) {
   if (!confirm('Remover produto e seus lançamentos?')) return;
   db.catalog  = db.catalog.filter(p => p.id !== id);
   db.entries  = db.entries.filter(e => e.productId !== id);
-  save(); renderCatalog(); updateStats(); showToast('Removido', 'error');
+  await deleteFromIDB(id);
+  saveEntries();
+  renderCatalog(); updateStats(); showToast('Removido', 'error');
 }
 
 function delEntry(eid) {
   db.entries = db.entries.filter(e => e.id !== eid);
-  save(); renderCatalog(); updateStats(); showToast('Entrada removida');
+  saveEntries(); renderCatalog(); updateStats(); showToast('Entrada removida');
 }
 
 function addDirectEntry(productId) {
@@ -757,8 +829,7 @@ function addDirectEntry(productId) {
   const existing = db.entries.find(e => e.productId === productId && e.expiry === date);
   if (existing) { existing.qty += qty; showToast('Quantidade somada ✓', 'success'); }
   else { db.entries.push({ id: Date.now().toString(), productId, expiry: date, qty, addedAt: new Date().toISOString() }); showToast('Validade adicionada ✓', 'success'); }
-  save(); renderCatalog(); updateStats();
-  document.getElementById('d-' + productId).value = '';
+  saveEntries(); renderCatalog(); updateStats();
   document.getElementById('q-' + productId).value = '1';
   document.getElementById('ce-' + productId)?.classList.add('open');
 }
@@ -899,7 +970,7 @@ function addCountEntry() {
       showToast(`${countProduct.name} adicionado ✓`, 'success');
     }
   }
-  save(); updateStats(); renderCountList();
+  saveEntries(); updateStats(); renderCountList();
   closeModal('count-modal');
   countProduct = null;
   setTimeout(() => openCountScanner(), 600);
@@ -1022,26 +1093,33 @@ async function confirmImport() {
   btn.disabled = true;
   btn.textContent = '⏳ Importando...';
 
-  // Build a Set of normalized existing codes for O(1) lookup
+  // Build Set of existing codes for O(1) lookup
   const existingCodes = new Set(db.catalog.map(p => normCode(p.barcode)));
 
   let added = 0, skipped = 0;
-  const BATCH = 2000; // larger batches are fine now with O(1) lookup
+  const BATCH = 2000;
+  const ts = Date.now();
 
   for (let i = 0; i < pendingImport.length; i += BATCH) {
     const batch = pendingImport.slice(i, i + BATCH);
-    const ts = Date.now();
+    const newItems = [];
+
     batch.forEach((p, j) => {
       const n = normCode(p.barcode);
       if (existingCodes.has(n)) { skipped++; return; }
       existingCodes.add(n);
-      db.catalog.push({
-        id: `${ts}${i+j}`,
+      const item = {
+        id: `${ts}_${i+j}`,
         barcode: p.barcode, name: p.name, sku: p.sku || '',
         category: '', unit: 'un', source: 'import'
-      });
+      };
+      db.catalog.push(item);
+      newItems.push(item);
       added++;
     });
+
+    // Save this batch to IndexedDB
+    if (newItems.length) await saveCatalogToIDB(newItems);
 
     const done = Math.min(i + BATCH, pendingImport.length);
     btn.textContent = `⏳ ${done} / ${pendingImport.length}...`;
@@ -1052,9 +1130,7 @@ async function confirmImport() {
     await new Promise(r => setTimeout(r, 0));
   }
 
-  save();
   updateStats();
-
   pendingImport = [];
   document.getElementById('import-preview').style.display = 'none';
   btn.style.display = 'none';
@@ -1080,10 +1156,11 @@ function confirmClearCatalog() {
   openModal('clear-catalog-modal');
 }
 
-function clearCatalog() {
+async function clearCatalog() {
   closeModal('clear-catalog-modal');
   db.catalog = [];
-  save(); renderCatalog(); updateStats(); showToast('Catálogo limpo', 'error');
+  await clearCatalogIDB();
+  renderCatalog(); updateStats(); showToast('Catálogo limpo', 'error');
 }
 
 // ══════════════════════ REPORT ══════════════════════
@@ -1233,21 +1310,21 @@ function saveEditEntry() {
   const e = db.entries.find(x => x.id === id); if (!e) return;
   e.expiry = expiry;
   e.qty    = qty;
-  save(); renderCountList(); renderCatalog(); closeModal('edit-entry-modal');
+  saveEntries(); renderCountList(); renderCatalog(); closeModal('edit-entry-modal');
   showToast('Lançamento atualizado ✓', 'success');
 }
 
 function deleteEntryFromEdit() {
   const id = document.getElementById('edit-entry-id').value;
   db.entries = db.entries.filter(e => e.id !== id);
-  save(); renderCountList(); renderCatalog(); updateStats();
+  saveEntries(); renderCountList(); renderCatalog(); updateStats();
   closeModal('edit-entry-modal');
   showToast('Lançamento removido', 'error');
 }
 function clearAllData() {
   closeModal('clear-count-modal');
   db.entries = [];
-  save(); renderCountList(); updateStats(); showToast('Contagem limpa', 'error');
+  saveEntries(); renderCountList(); updateStats(); showToast('Contagem limpa', 'error');
 }
 
 // ══════════════════════ MODALS ══════════════════════
@@ -1281,11 +1358,42 @@ function parseDate(str) {
 }
 
 // ══════════════════════ INIT ══════════════════════
-renderCountList();
-updateStats();
-document.getElementById('search-btn').style.display = 'flex'; // contagem is default tab
-const _savedNome = localStorage.getItem('estoquemax_contagem_nome');
-if (_savedNome) { const el = document.getElementById('contagem-nome'); if(el) el.value = _savedNome; }
+(async () => {
+  // Open IndexedDB
+  idb = await openIDB();
+
+  // Load catalog from IDB
+  db.catalog = await loadCatalogFromIDB();
+
+  // Migrate old localStorage catalog if exists
+  const old = localStorage.getItem('estoquemax_v2');
+  if (old) {
+    try {
+      const parsed = JSON.parse(old);
+      if (parsed.catalog && parsed.catalog.length > 0 && db.catalog.length === 0) {
+        db.catalog = parsed.catalog;
+        await saveCatalogToIDB(db.catalog);
+      }
+      if (parsed.entries) {
+        localStorage.setItem('estoquemax_entries', JSON.stringify(parsed.entries));
+      }
+    } catch(e) {}
+    localStorage.removeItem('estoquemax_v2');
+  }
+
+  // Load entries from localStorage (small data, fast)
+  try {
+    const savedEntries = localStorage.getItem('estoquemax_entries');
+    if (savedEntries) db.entries = JSON.parse(savedEntries);
+  } catch(e) { db.entries = []; }
+
+  // Render
+  renderCountList();
+  updateStats();
+  document.getElementById('search-btn').style.display = 'flex';
+  const _savedNome = localStorage.getItem('estoquemax_contagem_nome');
+  if (_savedNome) { const el = document.getElementById('contagem-nome'); if(el) el.value = _savedNome; }
+})();
 </script>
 </body>
 </html>
