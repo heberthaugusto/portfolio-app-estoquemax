@@ -265,47 +265,6 @@
 
 <!-- ═══ TELA: CONTAGEM ═══ -->
 <div id="screen-contagem" class="screen active">
-  <!-- Banner: não encontrado -->
-  <div class="not-found-banner" id="not-found-banner">
-    <div class="nf-title">⚠️ Produto não cadastrado</div>
-    <div class="nf-code" id="nf-code"></div>
-    <div class="nf-msg">Este código de barras não existe no catálogo. O que deseja fazer?</div>
-    <div class="flex gap-8" style="flex-wrap:wrap">
-      <button class="btn btn-primary btn-sm flex-1" onclick="countWithoutCatalog()">📋 Contar assim mesmo</button>
-      <button class="btn btn-warn btn-sm flex-1" onclick="registerFromNotFound()">➕ Cadastrar Agora</button>
-      <button class="btn btn-secondary btn-sm" style="width:100%" onclick="hideNotFound()">Ignorar</button>
-    </div>
-  </div>
-
-  <!-- Formulário de lançamento -->
-  <div id="count-form-area" style="display:none">
-    <div class="card">
-      <div class="section-title">✅ Produto Identificado</div>
-      <div class="found-card show" id="found-card">
-        <div class="found-icon" id="found-icon">📦</div>
-        <div>
-          <div class="found-name" id="found-name">—</div>
-          <div class="found-barcode" id="found-barcode">—</div>
-        </div>
-      </div>
-      <div class="form-group">
-        <label>Data de Validade</label>
-        <input type="text" id="count-expiry" placeholder="DD/MM/AAAA" maxlength="10" inputmode="numeric" oninput="maskDate(this)">
-      </div>
-      <div class="form-group" style="margin-bottom:0">
-        <label>Quantidade</label>
-        <input type="number" id="count-qty" value="1" min="1">
-      </div>
-      <div class="divider"></div>
-      <div class="flex gap-8">
-        <button class="btn btn-secondary flex-1" onclick="cancelCount()">Cancelar</button>
-        <button class="btn btn-primary" style="flex:2" onclick="addCountEntry()">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="15" height="15"><path d="M12 5v14M5 12h14"/></svg>
-          Adicionar ao Estoque
-        </button>
-      </div>
-    </div>
-  </div>
 
   <!-- Campo: nome da contagem -->
   <div class="card" style="margin-bottom:12px">
@@ -360,13 +319,26 @@
 <div id="screen-relatorio" class="screen">
   <div class="card">
     <div class="section-title">Exportar Inventário</div>
+    <div class="export-option" onclick="exportTXT()">
+      <div class="exp-icon" style="background:rgba(0,153,255,0.1)">📄</div>
+      <div><div class="exp-label">Exportar TXT</div><div class="exp-desc">Gera os 2 arquivos .txt da contagem</div></div>
+    </div>
+    <div class="export-option" onclick="sendToDrive()">
+      <div class="exp-icon" style="background:rgba(66,133,244,0.12)">
+        <svg viewBox="0 0 87.3 78" width="26" height="26" xmlns="http://www.w3.org/2000/svg">
+          <path d="m6.6 66.85 3.85 6.65c.8 1.4 1.95 2.5 3.3 3.3l13.75-23.8h-27.5c0 1.55.4 3.1 1.2 4.5z" fill="#0066da"/>
+          <path d="m43.65 25-13.75-23.8c-1.35.8-2.5 1.9-3.3 3.3l-25.4 44a9.06 9.06 0 0 0 -1.2 4.5h27.5z" fill="#00ac47"/>
+          <path d="m73.55 76.8c1.35-.8 2.5-1.9 3.3-3.3l1.6-2.75 7.65-13.25c.8-1.4 1.2-2.95 1.2-4.5h-27.502l5.852 11.5z" fill="#ea4335"/>
+          <path d="m43.65 25 13.75-23.8c-1.35-.8-2.9-1.2-4.5-1.2h-18.5c-1.6 0-3.15.45-4.5 1.2z" fill="#00832d"/>
+          <path d="m59.8 53h-32.3l-13.75 23.8c1.35.8 2.9 1.2 4.5 1.2h50.8c1.6 0 3.15-.45 4.5-1.2z" fill="#2684fc"/>
+          <path d="m73.4 26.5-12.7-22c-.8-1.4-1.95-2.5-3.3-3.3l-13.75 23.8 16.15 27h27.45c0-1.55-.4-3.1-1.2-4.5z" fill="#ffba00"/>
+        </svg>
+      </div>
+      <div><div class="exp-label">Enviar para o Google Drive</div><div class="exp-desc">Compartilha os arquivos direto no Drive</div></div>
+    </div>
     <div class="export-option" onclick="exportCSV()">
       <div class="exp-icon" style="background:rgba(0,212,170,0.1)">📊</div>
       <div><div class="exp-label">Exportar CSV</div><div class="exp-desc">Compatível com Excel e Google Sheets</div></div>
-    </div>
-    <div class="export-option" onclick="exportTXT()">
-      <div class="exp-icon" style="background:rgba(0,153,255,0.1)">📄</div>
-      <div><div class="exp-label">Exportar TXT</div><div class="exp-desc">Relatório legível e fácil de compartilhar</div></div>
     </div>
     <div class="export-option" onclick="shareWhatsApp()">
       <div class="exp-icon" style="background:rgba(0,201,122,0.1)">💬</div>
@@ -390,8 +362,8 @@
     Catálogo
   </button>
   <button class="nav-btn" id="nav-relatorio" onclick="switchTab('relatorio');buildReport()">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
-    Relatório
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+    Exportar
   </button>
 </nav>
 
@@ -444,6 +416,39 @@
     <div class="flex gap-8" style="margin-top:4px">
       <button class="btn btn-secondary flex-1" onclick="closeModal('clear-count-modal')">Cancelar</button>
       <button class="btn btn-danger" style="flex:1" onclick="clearAllData()">Sim, Limpar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: LANÇAMENTO DE CONTAGEM -->
+<div id="count-modal" class="modal-overlay">
+  <div class="modal">
+    <div class="modal-handle"></div>
+
+    <!-- Produto identificado -->
+    <div class="found-card show" id="found-card" style="margin-bottom:16px">
+      <div class="found-icon" id="found-icon">📦</div>
+      <div style="min-width:0">
+        <div class="found-name" id="found-name">—</div>
+        <div class="found-barcode" id="found-barcode">—</div>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label>Data de Validade</label>
+      <input type="text" id="count-expiry" placeholder="DD/MM/AAAA" maxlength="10" inputmode="numeric" oninput="maskDate(this)">
+    </div>
+    <div class="form-group" style="margin-bottom:0">
+      <label>Quantidade</label>
+      <input type="number" id="count-qty" value="1" min="1">
+    </div>
+    <div class="divider"></div>
+    <div class="flex gap-8">
+      <button class="btn btn-secondary flex-1" onclick="cancelCount()">Cancelar</button>
+      <button class="btn btn-primary" style="flex:2" onclick="addCountEntry()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="15" height="15"><path d="M12 5v14M5 12h14"/></svg>
+        Adicionar
+      </button>
     </div>
   </div>
 </div>
@@ -821,11 +826,36 @@ function openBarcodeScanner() { closeModal('product-modal'); openScanner('barcod
 
 // ══════════════════════ COUNT UI ══════════════════════
 function resetCountUI() {
-  document.getElementById('count-form-area').style.display = 'none';
-  document.getElementById('not-found-banner').classList.remove('show');
-  document.getElementById('scan-cta').style.display = 'block';
+  closeModal('count-modal');
   countProduct = null; notFoundCode = null;
 }
+
+function showFoundProduct(prod) {
+  countProduct = prod;
+  notFoundCode = null;
+  document.getElementById('found-icon').textContent    = catEmoji(prod.category);
+  document.getElementById('found-name').textContent    = prod.name;
+  document.getElementById('found-barcode').textContent = prod.barcode;
+  document.getElementById('count-expiry').value = '';
+  document.getElementById('count-qty').value    = 1;
+  openModal('count-modal');
+  setTimeout(() => document.getElementById('count-expiry').focus(), 300);
+}
+
+function countWithoutCatalog() {
+  const code = notFoundCode;
+  notFoundCode = null;
+  document.getElementById('found-icon').textContent    = '❓';
+  document.getElementById('found-name').textContent    = `Código: ${code}`;
+  document.getElementById('found-barcode').textContent = '(sem cadastro no catálogo)';
+  document.getElementById('count-expiry').value = '';
+  document.getElementById('count-qty').value    = 1;
+  countProduct = { id: '__nf__' + code, barcode: code, name: `Código: ${code}`, category: '', unit: 'un', _uncatalogued: true };
+  openModal('count-modal');
+  setTimeout(() => document.getElementById('count-expiry').focus(), 300);
+}
+
+function cancelCount() { resetCountUI(); }
 
 function showManualEntry() {
   // Pause scanner while typing
@@ -852,56 +882,12 @@ function submitManualBarcode() {
   onScan(code);
 }
 
-function showFoundProduct(prod) {
-  notFoundCode = null;
-  document.getElementById('scan-cta').style.display = 'none';
-  document.getElementById('not-found-banner').classList.remove('show');
-  document.getElementById('found-icon').textContent   = catEmoji(prod.category);
-  document.getElementById('found-name').textContent   = prod.name;
-  document.getElementById('found-barcode').textContent = prod.barcode;
-  document.getElementById('count-expiry').value = '';
-  document.getElementById('count-qty').value    = 1;
-  document.getElementById('count-form-area').style.display = 'block';
-}
-
-function showNotFound(code) {
-  countProduct = null; notFoundCode = code;
-  document.getElementById('scan-cta').style.display = 'none';
-  document.getElementById('count-form-area').style.display = 'none';
-  document.getElementById('nf-code').textContent = `Código: ${code}`;
-  document.getElementById('not-found-banner').classList.add('show');
-}
-
-function hideNotFound() {
-  document.getElementById('not-found-banner').classList.remove('show');
-  document.getElementById('scan-cta').style.display = 'block';
-  notFoundCode = null;
-}
-
-function countWithoutCatalog() {
-  // Create a temporary virtual product using the barcode as identifier
-  const code = notFoundCode;
-  document.getElementById('not-found-banner').classList.remove('show');
-  document.getElementById('scan-cta').style.display = 'none';
-  document.getElementById('found-icon').textContent    = '❓';
-  document.getElementById('found-name').textContent    = `Código: ${code}`;
-  document.getElementById('found-barcode').textContent = '(sem cadastro no catálogo)';
-  document.getElementById('count-expiry').value = '';
-  document.getElementById('count-qty').value    = 1;
-  document.getElementById('count-form-area').style.display = 'block';
-  // Signal that this is an uncatalogued product
-  countProduct = { id: '__nf__' + code, barcode: code, name: `Código: ${code}`, category: '', unit: 'un', _uncatalogued: true };
-  notFoundCode = null;
-}
-
 function registerFromNotFound() {
   const code = notFoundCode;
-  hideNotFound();
+  resetCountUI();
   switchTab('catalogo');
   openAddProduct(code);
 }
-
-function cancelCount() { resetCountUI(); }
 
 function addCountEntry() {
   if (!countProduct) return;
@@ -934,7 +920,8 @@ function addCountEntry() {
     }
   }
   save(); updateStats(); renderCountList();
-  resetCountUI();
+  closeModal('count-modal');
+  countProduct = null;
   setTimeout(() => openCountScanner(), 600);
 }
 
@@ -1119,7 +1106,35 @@ function saveContagemNome() {
   localStorage.setItem('estoquemax_contagem_nome', document.getElementById('contagem-nome').value);
 }
 
-function exportCSV() { dlFile(getContagemNome()+'.csv', getCSVContent(), 'text/csv;charset=utf-8'); showToast('CSV exportado ✓','success'); }
+async function sendToDrive() {
+  const nome = getContagemNome();
+  const rows = getAllEntryRows();
+  if (!rows.length) { showToast('Nenhum lançamento para exportar!', 'error'); return; }
+
+  const txt1 = rows.map(r => `${r.barcode}|${r.name}|${expiryToShort(r.expiry)}|${r.qty}`).join('\r\n');
+  const txt2 = rows.map(r => `${r.barcode.padEnd(14,' ')};${String(r.qty).padStart(5,'0')}`).join('\r\n');
+
+  const file1 = new File([txt1], nome + '_validade.txt', { type: 'text/plain' });
+  const file2 = new File([txt2], nome + '.txt',          { type: 'text/plain' });
+
+  // Use Web Share API if available (Android Chrome supports file sharing)
+  if (navigator.canShare && navigator.canShare({ files: [file1, file2] })) {
+    try {
+      await navigator.share({
+        files: [file1, file2],
+        title: nome
+      });
+      showToast('Arquivos compartilhados ✓', 'success');
+    } catch (e) {
+      if (e.name !== 'AbortError') showToast('Erro ao compartilhar', 'error');
+    }
+  } else {
+    // Fallback: download both files
+    showToast('Compartilhamento não suportado, baixando...', 'warn');
+    dlFile(nome + '_validade.txt', txt1, 'text/plain;charset=utf-8');
+    setTimeout(() => dlFile(nome + '.txt', txt2, 'text/plain;charset=utf-8'), 400);
+  }
+}
 
 function exportTXT() {
   const nome = getContagemNome();
