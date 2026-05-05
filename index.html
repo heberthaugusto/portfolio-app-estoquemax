@@ -472,11 +472,35 @@
 
     <!-- Entrada manual dentro do modal do scanner -->
     <div id="manual-entry-area" style="display:none; margin-top:14px">
+
+      <!-- Campo 1: Código de barras -->
       <div class="form-group" style="margin-bottom:10px">
         <label>Código de Barras</label>
         <input type="text" id="manual-barcode" placeholder="Digite o código..." inputmode="numeric"
           style="font-family:'JetBrains Mono',monospace;font-size:16px;letter-spacing:1px">
       </div>
+
+      <!-- Divisor -->
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+        <div style="flex:1;height:1px;background:var(--border)"></div>
+        <span style="font-size:11px;color:var(--muted)">ou busque pelo SKU</span>
+        <div style="flex:1;height:1px;background:var(--border)"></div>
+      </div>
+
+      <!-- Campo 2: Busca por SKU -->
+      <div class="form-group" style="margin-bottom:10px; position:relative">
+        <label>Buscar por SKU ou Nome</label>
+        <input type="text" id="sku-search-input" placeholder="Digite o SKU ou nome do produto..."
+          oninput="onSkuSearch(this.value)" autocomplete="off">
+        <!-- Resultados dropdown -->
+        <div id="sku-results" style="
+          display:none; position:absolute; left:0; right:0; top:100%; z-index:99;
+          background:var(--bg2); border:1px solid var(--accent); border-top:none;
+          border-radius:0 0 10px 10px; max-height:180px; overflow-y:auto;
+          box-shadow:var(--shadow);
+        "></div>
+      </div>
+
       <div class="flex gap-8">
         <button class="btn btn-secondary flex-1" onclick="hideManualEntry()">Cancelar</button>
         <button class="btn btn-primary" style="flex:2" onclick="submitManualBarcode()">Confirmar</button>
@@ -924,20 +948,60 @@ function countWithoutCatalog() {
 function cancelCount() { resetCountUI(); }
 
 function showManualEntry() {
-  // Pause scanner while typing
   if (scanner) { scanner.pause(); }
   document.getElementById('qr-reader').style.display = 'none';
   document.getElementById('manual-entry-area').style.display = 'block';
   document.getElementById('scanner-buttons').style.display = 'none';
+  document.getElementById('manual-barcode').value = '';
+  document.getElementById('sku-search-input').value = '';
+  document.getElementById('sku-results').style.display = 'none';
   setTimeout(() => document.getElementById('manual-barcode').focus(), 100);
 }
 
 function hideManualEntry() {
   document.getElementById('manual-entry-area').style.display = 'none';
+  document.getElementById('sku-results').style.display = 'none';
   document.getElementById('qr-reader').style.display = 'block';
   document.getElementById('scanner-buttons').style.display = 'flex';
   document.getElementById('manual-barcode').value = '';
+  document.getElementById('sku-search-input').value = '';
   if (scanner) { scanner.resume(); }
+}
+
+function onSkuSearch(query) {
+  const resultsEl = document.getElementById('sku-results');
+  const q = query.trim().toLowerCase();
+  if (!q || q.length < 2) { resultsEl.style.display = 'none'; return; }
+
+  const matches = db.catalog.filter(p =>
+    (p.sku && p.sku.toLowerCase().includes(q)) ||
+    p.name.toLowerCase().includes(q)
+  ).slice(0, 8);
+
+  if (!matches.length) {
+    resultsEl.style.display = 'none';
+    return;
+  }
+
+  resultsEl.innerHTML = matches.map(p => `
+    <div onclick="selectSkuResult('${p.barcode}','${p.name.replace(/'/g,"\\'")}','${p.sku||''}')"
+      style="padding:10px 14px;cursor:pointer;border-bottom:1px solid var(--border);transition:background 0.15s"
+      onmouseenter="this.style.background='rgba(0,212,170,0.08)'"
+      onmouseleave="this.style.background=''"
+    >
+      <div style="font-size:13px;font-weight:600;color:var(--text)">${p.name}</div>
+      <div style="font-size:11px;color:var(--muted);font-family:'JetBrains Mono',monospace;margin-top:2px">
+        ${p.barcode}${p.sku ? ' &nbsp;·&nbsp; SKU: '+p.sku : ''}
+      </div>
+    </div>
+  `).join('');
+  resultsEl.style.display = 'block';
+}
+
+function selectSkuResult(barcode, name, sku) {
+  document.getElementById('manual-barcode').value = barcode;
+  document.getElementById('sku-search-input').value = sku ? `SKU: ${sku} — ${name}` : name;
+  document.getElementById('sku-results').style.display = 'none';
 }
 
 function submitManualBarcode() {
