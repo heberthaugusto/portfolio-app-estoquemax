@@ -952,10 +952,14 @@ function showManualEntry() {
   document.getElementById('qr-reader').style.display = 'none';
   document.getElementById('manual-entry-area').style.display = 'block';
   document.getElementById('scanner-buttons').style.display = 'none';
+  document.getElementById('scanner-title').textContent = '⌨️ Inserir Produto Manualmente';
   document.getElementById('manual-barcode').value = '';
   document.getElementById('sku-search-input').value = '';
   document.getElementById('sku-results').style.display = 'none';
-  setTimeout(() => document.getElementById('manual-barcode').focus(), 100);
+  // Scroll modal to top so fields are visible
+  const modal = document.querySelector('#scanner-modal .modal');
+  if (modal) modal.scrollTop = 0;
+  setTimeout(() => document.getElementById('manual-barcode').focus(), 150);
 }
 
 function hideManualEntry() {
@@ -963,6 +967,7 @@ function hideManualEntry() {
   document.getElementById('sku-results').style.display = 'none';
   document.getElementById('qr-reader').style.display = 'block';
   document.getElementById('scanner-buttons').style.display = 'flex';
+  document.getElementById('scanner-title').textContent = '📷 Escanear Código de Barras';
   document.getElementById('manual-barcode').value = '';
   document.getElementById('sku-search-input').value = '';
   if (scanner) { scanner.resume(); }
