@@ -663,7 +663,11 @@ function renderCatalog() {
     return;
   }
 
-  list.innerHTML = prods.map(p => {
+  // Limit render to 100 items to avoid freezing with large catalogs
+  const limited = !query && prods.length > 100;
+  const toRender = limited ? prods.slice(0, 100) : prods;
+
+  list.innerHTML = toRender.map(p => {
     const ents = db.entries.filter(e => e.productId === p.id);
     const total = ents.reduce((s,e) => s + e.qty, 0);
 
@@ -710,7 +714,7 @@ function renderCatalog() {
         </div>
       </div>
     </div>`;
-  }).join('');
+  }).join('') + (limited ? `<p style="text-align:center;font-size:12px;color:var(--muted);padding:12px 0">Mostrando 100 de ${prods.length} produtos. Use a busca para encontrar os demais.</p>` : '');
 }
 
 function toggleExp(id) { document.getElementById(id)?.classList.toggle('open'); }
@@ -1035,27 +1039,56 @@ function parseTxt(text) {
   }
 }
 
-function confirmImport() {
+async function confirmImport() {
   if (!pendingImport.length) return;
+
+  const btn = document.getElementById('btn-confirm-import');
+  const res = document.getElementById('import-result');
+  btn.disabled = true;
+  btn.textContent = '⏳ Importando...';
+
   let added = 0, skipped = 0;
-  pendingImport.forEach(p => {
-    if (findProduct(p.barcode)) { skipped++; return; }
-    db.catalog.push({
-      id: Date.now().toString() + Math.random().toString(36).slice(2,5),
-      barcode: p.barcode, name: p.name, sku: p.sku || '',
-      category: '', unit: 'un', source: 'import'
+  const BATCH = 500; // process 500 at a time to keep UI responsive
+
+  for (let i = 0; i < pendingImport.length; i += BATCH) {
+    const batch = pendingImport.slice(i, i + BATCH);
+    batch.forEach(p => {
+      if (findProduct(p.barcode)) { skipped++; return; }
+      db.catalog.push({
+        id: Date.now().toString() + Math.random().toString(36).slice(2,6),
+        barcode: p.barcode, name: p.name, sku: p.sku || '',
+        category: '', unit: 'un', source: 'import'
+      });
+      added++;
     });
-    added++;
-  });
-  save(); updateStats(); refreshImportStats();
+
+    // Update progress feedback every batch
+    const done = Math.min(i + BATCH, pendingImport.length);
+    btn.textContent = `⏳ ${done} / ${pendingImport.length}...`;
+    res.className = 'import-result import-ok';
+    res.style.display = 'block';
+    res.innerHTML = `⏳ Importando... <strong>${done}</strong> de ${pendingImport.length}`;
+
+    // Yield to browser so UI doesn't freeze
+    await new Promise(r => setTimeout(r, 0));
+  }
+
+  // Save once at the end (not inside the loop)
+  save();
+  updateStats();
+
   pendingImport = [];
   document.getElementById('import-preview').style.display = 'none';
-  document.getElementById('btn-confirm-import').style.display = 'none';
+  btn.style.display = 'none';
+  btn.disabled = false;
+  btn.textContent = '✅ Confirmar Importação';
   document.getElementById('import-file-input').value = '';
-  const res = document.getElementById('import-result');
+
   res.className = 'import-result import-ok';
+  res.style.display = 'block';
   res.innerHTML = `🎉 <strong>${added} produtos importados</strong>` +
     (skipped ? ` &nbsp;·&nbsp; ${skipped} já existiam (ignorados)` : '');
+
   showToast(`${added} produtos importados ✓`, 'success');
 }
 
