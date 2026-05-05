@@ -193,35 +193,74 @@
       <div class="logo-icon">📦</div>
       <span class="logo-text">EstoqueMax</span>
     </div>
-    <button class="btn-icon" onclick="toggleSearch()">
+    <button class="btn-icon" id="search-btn" onclick="toggleSearch()" style="display:none">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="17" height="17"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
     </button>
   </div>
-  <div class="stats-row">
-    <div class="stat-chip"><div class="stat-val" id="stat-catalog">0</div><div class="stat-lbl">No Catálogo</div></div>
-    <div class="stat-chip"><div class="stat-val" id="stat-total">0</div><div class="stat-lbl">Unidades</div></div>
-    <div class="stat-chip"><div class="stat-val" id="stat-expiring" style="color:var(--warn)">0</div><div class="stat-lbl">A Vencer</div></div>
+  <div id="search-wrap" style="display:none; position:relative; margin-top:8px">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="position:absolute;left:13px;top:50%;transform:translateY(-50%);width:16px;height:16px;color:var(--muted);pointer-events:none"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+    <input id="search-input" type="text" placeholder="Buscar nome ou código..." oninput="onSearchInput()"
+      style="padding-left:40px;width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding-top:11px;padding-bottom:11px;padding-right:13px;color:var(--text);font-family:inherit;font-size:15px;outline:none;">
   </div>
 </div>
 
 <!-- ═══ TELA: CATÁLOGO ═══ -->
 <div id="screen-catalogo" class="screen">
-  <div class="search-wrap" id="search-wrap" style="display:none">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
-    <input id="search-input" type="text" placeholder="Buscar nome ou código..." oninput="renderCatalog()">
+  <div style="display:flex; align-items:center; justify-content:center; margin-bottom:12px">
+    <div class="stat-chip" style="min-width:120px; text-align:center">
+      <div class="stat-val" id="stat-catalog">0</div>
+      <div class="stat-lbl">No Catálogo</div>
+    </div>
   </div>
-  <div class="tab-pills">
-    <div class="pill active" onclick="setFilter('all',this)">Todos</div>
-    <div class="pill" onclick="setFilter('stock',this)">Com Estoque</div>
-    <div class="pill" onclick="setFilter('nostock',this)">Sem Estoque</div>
-    <div class="pill" onclick="setFilter('expiring',this)">A Vencer</div>
-    <div class="pill" onclick="setFilter('expired',this)">Vencidos</div>
+
+  <div class="card">
+    <div class="section-title">📂 Importar Catálogo (.txt)</div>
+    <p style="font-size:13px;color:var(--muted);margin-bottom:14px;line-height:1.6">
+      Selecione o arquivo <code style="background:var(--bg3);padding:1px 5px;border-radius:4px;font-size:11px">.txt</code> com seus produtos.<br>
+      Formato esperado em cada linha:<br>
+      <code style="background:var(--bg3);padding:3px 8px;border-radius:5px;font-size:11px;display:inline-block;margin-top:6px;letter-spacing:0.5px">CÓDIGO|NOME|SKU</code>
+    </p>
+    <div class="import-drop" id="import-drop">
+      <input type="file" accept=".txt,.csv" id="import-file-input" onchange="handleFileImport(this)">
+      <div style="font-size:34px;margin-bottom:8px">📄</div>
+      <div style="font-size:15px;font-weight:600;margin-bottom:3px">Toque para selecionar o arquivo</div>
+      <div style="font-size:12px;color:var(--muted)">Formatos aceitos: .txt</div>
+    </div>
+    <div class="import-preview" id="import-preview"></div>
+    <div class="import-result" id="import-result"></div>
+    <button class="btn btn-primary" id="btn-confirm-import" style="display:none;margin-top:12px" onclick="confirmImport()">
+      ✅ Confirmar Importação
+    </button>
   </div>
+
   <div id="catalog-list"></div>
   <button class="btn btn-primary" onclick="openAddProduct()" style="margin-top:4px">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="16" height="16"><path d="M12 5v14M5 12h14"/></svg>
     Cadastrar Produto Manualmente
   </button>
+  <button class="btn btn-danger" id="btn-clear-catalog" onclick="confirmClearCatalog()" style="display:none; margin-top:10px; margin-bottom:14px">
+    🗑️ Limpar Catálogo
+  </button>
+</div>
+
+<!-- MODAL: CONFIRMAR LIMPAR CATÁLOGO -->
+<div id="clear-catalog-modal" class="modal-overlay">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div style="text-align:center; margin-bottom:16px">
+      <div style="font-size:44px; margin-bottom:10px">⚠️</div>
+      <div style="font-size:17px; font-weight:700; margin-bottom:8px">Limpar Catálogo?</div>
+      <p style="font-size:13px; color:var(--muted); line-height:1.6">
+        Todos os <strong style="color:var(--text)">produtos cadastrados</strong> serão removidos permanentemente.<br>
+        Os lançamentos de estoque serão mantidos.<br><br>
+        <strong style="color:var(--danger)">Esta ação não pode ser desfeita.</strong>
+      </p>
+    </div>
+    <div class="flex gap-8" style="margin-top:4px">
+      <button class="btn btn-secondary flex-1" onclick="closeModal('clear-catalog-modal')">Cancelar</button>
+      <button class="btn btn-danger" style="flex:1" onclick="clearCatalog()">Sim, Limpar</button>
+    </div>
+  </div>
 </div>
 
 <!-- ═══ TELA: CONTAGEM ═══ -->
@@ -251,7 +290,7 @@
       </div>
       <div class="form-group">
         <label>Data de Validade</label>
-        <input type="date" id="count-expiry">
+        <input type="text" id="count-expiry" placeholder="DD/MM/AAAA" maxlength="10" inputmode="numeric" oninput="maskDate(this)">
       </div>
       <div class="form-group" style="margin-bottom:0">
         <label>Quantidade</label>
@@ -266,6 +305,15 @@
         </button>
       </div>
     </div>
+  </div>
+
+  <!-- Campo: nome da contagem -->
+  <div class="card" style="margin-bottom:12px">
+    <div class="section-title">📋 Nome da Contagem</div>
+    <input type="text" id="contagem-nome" inputmode="text"
+      style="font-family:'JetBrains Mono',monospace;font-size:17px;font-weight:600;letter-spacing:1px"
+      oninput="saveContagemNome()">
+    <p style="font-size:11px;color:var(--muted);margin-top:7px">Este nome será usado como nome do arquivo ao exportar (.txt)</p>
   </div>
 
   <!-- Botão escanear (visível quando nenhum estado ativo) -->
@@ -284,54 +332,28 @@
 
   <div id="count-list-hdr" style="display:none" class="section-title" style="margin-top:4px">Lançamentos de Hoje</div>
   <div id="count-list"></div>
-</div>
 
-<!-- ═══ TELA: IMPORTAR ═══ -->
-<div id="screen-importar" class="screen">
-  <div class="card">
-    <div class="section-title">📂 Importar Catálogo (.txt)</div>
-    <p style="font-size:13px;color:var(--muted);margin-bottom:14px;line-height:1.6">
-      Selecione o arquivo <code style="background:var(--bg3);padding:1px 5px;border-radius:4px;font-size:11px">.txt</code> com seus produtos.<br>
-      Formato esperado em cada linha:<br>
-      <code style="background:var(--bg3);padding:3px 8px;border-radius:5px;font-size:11px;display:inline-block;margin-top:6px;letter-spacing:0.5px">CÓDIGO;NOME DO PRODUTO</code>
-    </p>
-    <div class="import-drop" id="import-drop">
-      <input type="file" accept=".txt,.csv" id="import-file-input" onchange="handleFileImport(this)">
-      <div style="font-size:34px;margin-bottom:8px">📄</div>
-      <div style="font-size:15px;font-weight:600;margin-bottom:3px">Toque para selecionar o arquivo</div>
-      <div style="font-size:12px;color:var(--muted)">Formatos aceitos: .txt</div>
+  <div id="clear-count-area" style="display:none; margin-top:4px">
+    <div class="card" style="border-color:var(--danger)">
+      <div class="section-title" style="color:var(--danger)">Zona de Perigo</div>
+      <button class="btn btn-danger" onclick="confirmClearAllData()">🗑️ Limpar Toda a Contagem</button>
     </div>
-    <div class="import-preview" id="import-preview"></div>
-    <div class="import-result" id="import-result"></div>
-    <button class="btn btn-primary" id="btn-confirm-import" style="display:none;margin-top:12px" onclick="confirmImport()">
-      ✅ Confirmar Importação
-    </button>
   </div>
 
-  <div class="card">
-    <div class="section-title">📝 Formato Esperado do Arquivo</div>
-    <div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted);line-height:2.1;background:var(--bg3);border-radius:9px;padding:12px 14px;">
-300855693;COELHO R3601B<br>
-0100855589;COELHO ZX029600B<br>
-78962401015;GRILLER ENDURA<br>
-009200160330;FITILHO PRESENTE BR/OU<br>
-9107041929;CX CUBO CHOCOLOVERS C/10
-    </div>
-    <p style="font-size:12px;color:var(--muted);margin-top:10px;line-height:1.5">
-      • Antes do <code style="background:var(--bg3);padding:0 4px;border-radius:3px">;</code> = código de barras<br>
-      • Após o <code style="background:var(--bg3);padding:0 4px;border-radius:3px">;</code> = nome do produto<br>
-      • Linhas inválidas são ignoradas automaticamente
-    </p>
-  </div>
-
-  <div class="card">
-    <div class="section-title">📊 Status do Catálogo</div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
-      <div class="stat-chip"><div class="stat-val" id="imp-stat-cat">0</div><div class="stat-lbl">No Catálogo</div></div>
-      <div class="stat-chip"><div class="stat-val" id="imp-stat-stock" style="color:var(--accent2)">0</div><div class="stat-lbl">Com Estoque</div></div>
-    </div>
-    <button class="btn btn-danger" onclick="clearCatalog()">🗑️ Limpar Catálogo (mantém estoque)</button>
-  </div>
+  <!-- Botão flutuante de scan -->
+  <button onclick="openCountScanner()" style="
+    position:fixed; bottom:100px; right:20px;
+    width:58px; height:58px; border-radius:50%;
+    background:linear-gradient(135deg,var(--accent),var(--accent2));
+    border:none; cursor:pointer; box-shadow:0 4px 20px rgba(0,212,170,0.45);
+    display:flex; align-items:center; justify-content:center;
+    z-index:150; transition:transform 0.15s, box-shadow 0.15s;
+  " onmousedown="this.style.transform='scale(0.92)'" onmouseup="this.style.transform='scale(1)'" ontouchstart="this.style.transform='scale(0.92)'" ontouchend="this.style.transform='scale(1)'">
+    <svg viewBox="0 0 24 24" fill="none" stroke="#0a0f1e" stroke-width="2.5" width="26" height="26">
+      <path d="M3 9V5a2 2 0 0 1 2-2h4M15 3h4a2 2 0 0 1 2 2v4M21 15v4a2 2 0 0 1-2 2h-4M9 21H5a2 2 0 0 1-2-2v-4"/>
+      <path d="M7 12h2M11 12h2M15 12h2"/>
+    </svg>
+  </button>
 </div>
 
 <!-- ═══ TELA: RELATÓRIO ═══ -->
@@ -355,10 +377,6 @@
     <div class="section-title">Prévia do Relatório</div>
     <div id="report-preview" style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted);line-height:1.8;white-space:pre-wrap;max-height:320px;overflow-y:auto;"></div>
   </div>
-  <div class="card" style="border-color:var(--danger)">
-    <div class="section-title" style="color:var(--danger)">Zona de Perigo</div>
-    <button class="btn btn-danger" onclick="clearAllData()">🗑️ Limpar Todo o Estoque (mantém catálogo)</button>
-  </div>
 </div>
 
 <!-- BOTTOM NAV -->
@@ -371,15 +389,64 @@
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
     Catálogo
   </button>
-  <button class="nav-btn" id="nav-importar" onclick="switchTab('importar')">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-    Importar
-  </button>
   <button class="nav-btn" id="nav-relatorio" onclick="switchTab('relatorio');buildReport()">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
     Relatório
   </button>
 </nav>
+
+<!-- MODAL: EDITAR LANÇAMENTO -->
+<div id="edit-entry-modal" class="modal-overlay">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title">✏️ Editar Lançamento</div>
+    <input type="hidden" id="edit-entry-id">
+
+    <div class="found-card show" id="edit-entry-product" style="margin-bottom:14px">
+      <div class="found-icon" id="edit-entry-icon">📦</div>
+      <div>
+        <div class="found-name" id="edit-entry-name">—</div>
+        <div class="found-barcode" id="edit-entry-barcode">—</div>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label>Data de Validade</label>
+      <input type="text" id="edit-entry-expiry" placeholder="DD/MM/AAAA" maxlength="10" inputmode="numeric" oninput="maskDate(this)">
+    </div>
+    <div class="form-group">
+      <label>Quantidade</label>
+      <input type="number" id="edit-entry-qty" min="1">
+    </div>
+
+    <div class="divider"></div>
+    <div class="flex gap-8">
+      <button class="btn btn-danger btn-sm" onclick="deleteEntryFromEdit()">🗑️ Excluir</button>
+      <button class="btn btn-secondary flex-1" onclick="closeModal('edit-entry-modal')">Cancelar</button>
+      <button class="btn btn-primary flex-1" onclick="saveEditEntry()">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: CONFIRMAR LIMPAR CONTAGEM -->
+<div id="clear-count-modal" class="modal-overlay">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div style="text-align:center; margin-bottom:16px">
+      <div style="font-size:44px; margin-bottom:10px">⚠️</div>
+      <div style="font-size:17px; font-weight:700; margin-bottom:8px">Limpar Toda a Contagem?</div>
+      <p style="font-size:13px; color:var(--muted); line-height:1.6">
+        Todos os <strong style="color:var(--text)">lançamentos de estoque</strong> serão removidos permanentemente.<br>
+        O catálogo de produtos será mantido.<br><br>
+        <strong style="color:var(--danger)">Esta ação não pode ser desfeita.</strong>
+      </p>
+    </div>
+    <div class="flex gap-8" style="margin-top:4px">
+      <button class="btn btn-secondary flex-1" onclick="closeModal('clear-count-modal')">Cancelar</button>
+      <button class="btn btn-danger" style="flex:1" onclick="clearAllData()">Sim, Limpar</button>
+    </div>
+  </div>
+</div>
 
 <!-- MODAL: SCANNER -->
 <div id="scanner-modal" class="modal-overlay">
@@ -387,8 +454,23 @@
     <div class="modal-handle"></div>
     <div class="modal-title" id="scanner-title">📷 Escanear Código de Barras</div>
     <div id="qr-reader"></div>
-    <div style="margin-top:12px">
-      <button class="btn btn-secondary" onclick="stopScanner()">Fechar Câmera</button>
+
+    <!-- Entrada manual dentro do modal do scanner -->
+    <div id="manual-entry-area" style="display:none; margin-top:14px">
+      <div class="form-group" style="margin-bottom:10px">
+        <label>Código de Barras</label>
+        <input type="text" id="manual-barcode" placeholder="Digite o código..." inputmode="numeric"
+          style="font-family:'JetBrains Mono',monospace;font-size:16px;letter-spacing:1px">
+      </div>
+      <div class="flex gap-8">
+        <button class="btn btn-secondary flex-1" onclick="hideManualEntry()">Cancelar</button>
+        <button class="btn btn-primary" style="flex:2" onclick="submitManualBarcode()">Confirmar</button>
+      </div>
+    </div>
+
+    <div id="scanner-buttons" style="margin-top:12px; display:flex; gap:8px">
+      <button class="btn btn-secondary flex-1" onclick="stopScanner()">Fechar Câmera</button>
+      <button class="btn btn-secondary flex-1" onclick="showManualEntry()">⌨️ Inserir Manualmente</button>
     </div>
   </div>
 </div>
@@ -414,6 +496,10 @@
     <div class="form-group">
       <label>Nome do Produto *</label>
       <input type="text" id="p-name" placeholder="Ex: Leite Integral 1L">
+    </div>
+    <div class="form-group">
+      <label>SKU</label>
+      <input type="text" id="p-sku" placeholder="Ex: 572" style="font-family:'JetBrains Mono',monospace">
     </div>
     <div class="form-group">
       <label>Categoria</label>
@@ -502,9 +588,18 @@ function switchTab(tab) {
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
   document.getElementById('screen-' + tab).classList.add('active');
   document.getElementById('nav-' + tab).classList.add('active');
+
+  // Show search button only on contagem and catalogo
+  const showSearch = tab === 'contagem' || tab === 'catalogo';
+  document.getElementById('search-btn').style.display = showSearch ? 'flex' : 'none';
+
+  // Hide search bar and clear when switching tabs
+  document.getElementById('search-wrap').style.display = 'none';
+  document.getElementById('search-input').value = '';
+  searchVisible = false;
+
   if (tab === 'catalogo') renderCatalog();
   if (tab === 'contagem') { renderCountList(); resetCountUI(); }
-  if (tab === 'importar') refreshImportStats();
   if (tab === 'relatorio') buildReport();
 }
 
@@ -512,23 +607,26 @@ function toggleSearch() {
   searchVisible = !searchVisible;
   const w = document.getElementById('search-wrap');
   w.style.display = searchVisible ? 'block' : 'none';
-  if (searchVisible) document.getElementById('search-input').focus();
-  else { document.getElementById('search-input').value = ''; renderCatalog(); }
+  if (searchVisible) {
+    setTimeout(() => document.getElementById('search-input').focus(), 50);
+  } else {
+    document.getElementById('search-input').value = '';
+    onSearchInput();
+  }
+}
+
+function onSearchInput() {
+  // Determine active tab and search accordingly
+  if (document.getElementById('screen-catalogo').classList.contains('active')) {
+    renderCatalog();
+  } else if (document.getElementById('screen-contagem').classList.contains('active')) {
+    renderCountList();
+  }
 }
 
 // ══════════════════════ STATS ══════════════════════
 function updateStats() {
-  const today = new Date(); today.setHours(0,0,0,0);
-  const soon  = new Date(today); soon.setDate(soon.getDate() + 30);
-  let total = 0, expiring = 0;
-  db.entries.forEach(e => {
-    total += e.qty;
-    const d = new Date(e.expiry + 'T00:00:00');
-    if (d >= today && d <= soon) expiring++;
-  });
-  document.getElementById('stat-catalog').textContent  = db.catalog.length;
-  document.getElementById('stat-total').textContent    = total;
-  document.getElementById('stat-expiring').textContent = expiring;
+  document.getElementById('stat-catalog').textContent = db.catalog.length;
 }
 
 // ══════════════════════ CATALOG RENDER ══════════════════════
@@ -542,29 +640,21 @@ function setFilter(f, el) {
 function renderCatalog() {
   updateStats();
   const query = (document.getElementById('search-input')?.value || '').toLowerCase();
-  const today = new Date(); today.setHours(0,0,0,0);
-  const soon  = new Date(today); soon.setDate(soon.getDate() + 30);
+  const list = document.getElementById('catalog-list');
+  const btnClear = document.getElementById('btn-clear-catalog');
+
+  // Show/hide Limpar Catálogo button
+  btnClear.style.display = db.catalog.length > 0 ? 'flex' : 'none';
 
   let prods = db.catalog.filter(p => {
-    if (query && !p.name.toLowerCase().includes(query) && !p.barcode.toLowerCase().includes(query)) return false;
-    const ents = db.entries.filter(e => e.productId === p.id);
-    if (catalogFilter === 'stock')    return ents.some(e => e.qty > 0);
-    if (catalogFilter === 'nostock')  return !ents.some(e => e.qty > 0);
-    if (catalogFilter === 'expiring') return ents.some(e => { const d = new Date(e.expiry+'T00:00:00'); return d >= today && d <= soon; });
-    if (catalogFilter === 'expired')  return ents.some(e => new Date(e.expiry+'T00:00:00') < today);
+    if (query && !p.name.toLowerCase().includes(query) && !p.barcode.toLowerCase().includes(query) && !(p.sku||'').toLowerCase().includes(query)) return false;
     return true;
   });
 
-  const list = document.getElementById('catalog-list');
-
   if (!prods.length) {
-    list.innerHTML = `<div class="empty-state">
-      <div class="emoji">${db.catalog.length === 0 ? '📂' : '🔍'}</div>
-      <h3>${db.catalog.length === 0 ? 'Catálogo vazio' : 'Nenhum resultado'}</h3>
-      <p>${db.catalog.length === 0
-        ? 'Importe seu arquivo .txt na aba <strong>Importar</strong><br>ou cadastre produtos manualmente abaixo.'
-        : 'Tente outro filtro ou termo de busca.'}</p>
-    </div>`;
+    list.innerHTML = query
+      ? `<div class="empty-state"><div class="emoji">🔍</div><h3>Nenhum resultado</h3><p>Tente outro termo de busca.</p></div>`
+      : '';
     return;
   }
 
@@ -591,7 +681,7 @@ function renderCatalog() {
         <div class="cat-icon">${catEmoji(p.category)}</div>
         <div style="flex:1;min-width:0">
           <div class="cat-name">${p.name}</div>
-          <div class="cat-code">${p.barcode}</div>
+          <div class="cat-code">${p.barcode}${p.sku ? ' &nbsp;·&nbsp; SKU: '+p.sku : ''}</div>
         </div>
         <div style="display:flex;flex-direction:column;align-items:flex-end;gap:5px">
           <span class="cat-badge${total===0?' zero':''}">${total} ${p.unit||'un'}</span>
@@ -609,7 +699,7 @@ function renderCatalog() {
         ${rows}
         <div class="divider" style="margin-bottom:8px"></div>
         <div class="exp-add-row">
-          <input type="date" id="d-${p.id}" style="font-size:12px;padding:7px 9px">
+          <input type="text" id="d-${p.id}" placeholder="DD/MM/AAAA" maxlength="10" inputmode="numeric" oninput="maskDate(this)" style="font-size:12px;padding:7px 9px">
           <input type="number" id="q-${p.id}" value="1" min="1" style="font-size:12px;padding:7px 8px;text-align:center">
           <button class="btn btn-primary btn-sm" onclick="addDirectEntry('${p.id}')">+ Add</button>
         </div>
@@ -626,6 +716,7 @@ function openAddProduct(barcode = '') {
   document.getElementById('product-modal-title').textContent = '➕ Cadastrar Produto';
   document.getElementById('p-barcode').value = barcode;
   document.getElementById('p-name').value = '';
+  document.getElementById('p-sku').value = '';
   document.getElementById('p-category').value = '';
   document.getElementById('p-unit').value = 'un';
   openModal('product-modal');
@@ -637,6 +728,7 @@ function editProduct(id) {
   document.getElementById('product-modal-title').textContent = '✏️ Editar Produto';
   document.getElementById('p-barcode').value  = p.barcode;
   document.getElementById('p-name').value     = p.name;
+  document.getElementById('p-sku').value      = p.sku || '';
   document.getElementById('p-category').value = p.category || '';
   document.getElementById('p-unit').value     = p.unit || 'un';
   openModal('product-modal');
@@ -645,17 +737,18 @@ function editProduct(id) {
 function saveProduct() {
   const barcode  = document.getElementById('p-barcode').value.trim();
   const name     = document.getElementById('p-name').value.trim();
+  const sku      = document.getElementById('p-sku').value.trim();
   const category = document.getElementById('p-category').value;
   const unit     = document.getElementById('p-unit').value;
   const editId   = document.getElementById('edit-id').value;
   if (!barcode || !name) { showToast('Preencha código e nome!', 'error'); return; }
   if (editId) {
     const p = db.catalog.find(x => x.id === editId);
-    if (p) Object.assign(p, { barcode, name, category, unit });
+    if (p) Object.assign(p, { barcode, name, sku, category, unit });
     showToast('Produto atualizado ✓', 'success');
   } else {
     if (findProduct(barcode)) { showToast('Código já cadastrado!', 'error'); return; }
-    db.catalog.push({ id: Date.now().toString(), barcode, name, category, unit, source:'manual' });
+    db.catalog.push({ id: Date.now().toString(), barcode, name, sku, category, unit, source:'manual' });
     showToast('Produto cadastrado ✓', 'success');
   }
   save(); closeModal('product-modal'); renderCatalog(); updateStats();
@@ -674,9 +767,9 @@ function delEntry(eid) {
 }
 
 function addDirectEntry(productId) {
-  const date = document.getElementById('d-' + productId).value;
+  const date = parseDate(document.getElementById('d-' + productId).value);
   const qty  = parseInt(document.getElementById('q-' + productId).value) || 1;
-  if (!date) { showToast('Informe a validade!', 'error'); return; }
+  if (!date) { showToast('Data inválida! Use DD/MM/AAAA', 'error'); return; }
   const existing = db.entries.find(e => e.productId === productId && e.expiry === date);
   if (existing) { existing.qty += qty; showToast('Quantidade somada ✓', 'success'); }
   else { db.entries.push({ id: Date.now().toString(), productId, expiry: date, qty, addedAt: new Date().toISOString() }); showToast('Validade adicionada ✓', 'success'); }
@@ -732,8 +825,32 @@ function resetCountUI() {
   countProduct = null; notFoundCode = null;
 }
 
+function showManualEntry() {
+  // Pause scanner while typing
+  if (scanner) { scanner.pause(); }
+  document.getElementById('qr-reader').style.display = 'none';
+  document.getElementById('manual-entry-area').style.display = 'block';
+  document.getElementById('scanner-buttons').style.display = 'none';
+  setTimeout(() => document.getElementById('manual-barcode').focus(), 100);
+}
+
+function hideManualEntry() {
+  document.getElementById('manual-entry-area').style.display = 'none';
+  document.getElementById('qr-reader').style.display = 'block';
+  document.getElementById('scanner-buttons').style.display = 'flex';
+  document.getElementById('manual-barcode').value = '';
+  if (scanner) { scanner.resume(); }
+}
+
+function submitManualBarcode() {
+  const code = document.getElementById('manual-barcode').value.trim();
+  if (!code) { document.getElementById('manual-barcode').focus(); return; }
+  document.getElementById('manual-barcode').value = '';
+  stopScanner();
+  onScan(code);
+}
+
 function showFoundProduct(prod) {
-  countProduct = prod;
   notFoundCode = null;
   document.getElementById('scan-cta').style.display = 'none';
   document.getElementById('not-found-banner').classList.remove('show');
@@ -786,9 +903,9 @@ function cancelCount() { resetCountUI(); }
 
 function addCountEntry() {
   if (!countProduct) return;
-  const expiry = document.getElementById('count-expiry').value;
+  const expiry = parseDate(document.getElementById('count-expiry').value);
   const qty    = parseInt(document.getElementById('count-qty').value) || 1;
-  if (!expiry) { showToast('Informe a data de validade!', 'error'); return; }
+  if (!expiry) { showToast('Data inválida! Use DD/MM/AAAA', 'error'); return; }
 
   if (countProduct._uncatalogued) {
     // Save as uncatalogued entry: store directly with barcode as productId marker
@@ -820,36 +937,57 @@ function addCountEntry() {
 }
 
 function renderCountList() {
-  const list = document.getElementById('count-list');
-  const hdr  = document.getElementById('count-list-hdr');
-  const today = new Date().toDateString();
-  const recent = db.entries
+  const list    = document.getElementById('count-list');
+  const hdr     = document.getElementById('count-list-hdr');
+  const clearEl = document.getElementById('clear-count-area');
+  const query   = (document.getElementById('search-input')?.value || '').toLowerCase();
+  const today   = new Date().toDateString();
+
+  let recent = db.entries
     .filter(e => new Date(e.addedAt).toDateString() === today)
     .sort((a,b) => new Date(b.addedAt) - new Date(a.addedAt))
     .slice(0, 30);
+
+  // Filter by search query
+  if (query) {
+    recent = recent.filter(e => {
+      if (e._uncatalogued) return e.barcode.includes(query);
+      const prod = db.catalog.find(p => p.id === e.productId);
+      return prod && (prod.name.toLowerCase().includes(query) || prod.barcode.includes(query) || (prod.sku||'').toLowerCase().includes(query));
+    });
+  }
+
+  // Show/hide danger zone based on whether there are any entries at all
+  clearEl.style.display = db.entries.length > 0 ? 'block' : 'none';
   hdr.style.display = recent.length ? 'block' : 'none';
   if (!recent.length) { list.innerHTML = ''; return; }
   list.innerHTML = recent.map(e => {
     const st = expStatus(e.expiry);
     if (e._uncatalogued) {
-      return `<div class="count-item" style="border-color:var(--warn)">
+      return `<div class="count-item" style="border-color:var(--warn);cursor:pointer" onclick="openEditEntry('${e.id}')">
         <div class="count-icon">❓</div>
         <div class="count-info">
           <div class="count-name" style="color:var(--warn)">${e.barcode}</div>
           <div class="count-detail">Sem cadastro · Val: ${fmtDate(e.expiry)}&nbsp;<span class="etag ${st.cls}" style="padding:1px 6px">${st.label}</span></div>
         </div>
-        <div class="count-qty">${e.qty}<span style="font-size:10px;color:var(--muted);font-family:inherit">&nbsp;un</span></div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <div class="count-qty">${e.qty}<span style="font-size:10px;color:var(--muted);font-family:inherit">&nbsp;un</span></div>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15" style="color:var(--muted);flex-shrink:0"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+        </div>
       </div>`;
     }
     const prod = db.catalog.find(p => p.id === e.productId);
     if (!prod) return '';
-    return `<div class="count-item">
+    return `<div class="count-item" style="cursor:pointer" onclick="openEditEntry('${e.id}')">
       <div class="count-icon">${catEmoji(prod.category)}</div>
       <div class="count-info">
         <div class="count-name">${prod.name}</div>
         <div class="count-detail">Val: ${fmtDate(e.expiry)}&nbsp;&nbsp;<span class="etag ${st.cls}" style="padding:1px 6px">${st.label}</span></div>
       </div>
-      <div class="count-qty">${e.qty}<span style="font-size:10px;color:var(--muted);font-family:inherit">&nbsp;${prod.unit||'un'}</span></div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <div class="count-qty">${e.qty}<span style="font-size:10px;color:var(--muted);font-family:inherit">&nbsp;${prod.unit||'un'}</span></div>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15" style="color:var(--muted);flex-shrink:0"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+      </div>
     </div>`;
   }).join('');
 }
@@ -871,18 +1009,21 @@ function parseTxt(text) {
   lines.forEach(raw => {
     const line = raw.trim();
     if (!line) return;
-    const idx = line.indexOf(';');
-    if (idx < 1) { invalid++; return; }
-    const code = line.substring(0, idx).trim();
-    const name = line.substring(idx + 1).trim().replace(/\s+/g, ' ');
+    const parts = line.split('|');
+    if (parts.length < 2) { invalid++; return; }
+    const code = parts[0].trim();
+    const name = parts[1].trim().replace(/\s+/g, ' ');
+    const sku  = parts[2] ? parts[2].trim() : '';
     if (!code || !name) { invalid++; return; }
-    pendingImport.push({ barcode: code, name });
+    pendingImport.push({ barcode: code, name, sku });
   });
 
   const prev = document.getElementById('import-preview');
   if (pendingImport.length > 0) {
     prev.style.display = 'block';
-    prev.textContent = pendingImport.slice(0, 10).map(p => `${p.barcode.padEnd(16)}${p.name}`).join('\n')
+    prev.textContent = pendingImport.slice(0, 10)
+      .map(p => `${p.barcode.padEnd(16)}${p.name}${p.sku ? '  [SKU:'+p.sku+']' : ''}`)
+      .join('\n')
       + (pendingImport.length > 10 ? `\n... e mais ${pendingImport.length - 10} produtos` : '');
   } else {
     prev.style.display = 'none';
@@ -909,7 +1050,7 @@ function confirmImport() {
     if (findProduct(p.barcode)) { skipped++; return; }
     db.catalog.push({
       id: Date.now().toString() + Math.random().toString(36).slice(2,5),
-      barcode: p.barcode, name: p.name,
+      barcode: p.barcode, name: p.name, sku: p.sku || '',
       category: '', unit: 'un', source: 'import'
     });
     added++;
@@ -932,75 +1073,150 @@ function refreshImportStats() {
     db.catalog.filter(p => db.entries.some(e => e.productId === p.id)).length;
 }
 
+function confirmClearCatalog() {
+  openModal('clear-catalog-modal');
+}
+
 function clearCatalog() {
-  if (!confirm('Apagar TODO o catálogo? Os lançamentos serão mantidos.')) return;
+  closeModal('clear-catalog-modal');
   db.catalog = [];
-  save(); renderCatalog(); updateStats(); refreshImportStats(); showToast('Catálogo limpo', 'error');
+  save(); renderCatalog(); updateStats(); showToast('Catálogo limpo', 'error');
 }
 
 // ══════════════════════ REPORT ══════════════════════
 function buildReport() {
-  const lines = [], now = new Date();
-  lines.push('INVENTÁRIO ESTOQUEMAX');
-  lines.push(`Gerado em: ${now.toLocaleString('pt-BR')}`);
-  lines.push('─'.repeat(54));
-  const withE = db.catalog.filter(p => db.entries.some(e => e.productId === p.id));
-  const uncatalogued = db.entries.filter(e => e._uncatalogued);
-
-  if (!withE.length && !uncatalogued.length) {
-    document.getElementById('report-preview').textContent = 'Nenhum lançamento de estoque registrado.'; return;
+  const rows = getAllEntryRows();
+  if (!rows.length) {
+    document.getElementById('report-preview').textContent = 'Nenhum lançamento registrado.';
+    return;
   }
-
-  withE.forEach(p => {
-    const ents = db.entries.filter(e => e.productId === p.id);
-    const total = ents.reduce((s,e) => s + e.qty, 0);
-    lines.push(`\n▸ ${p.name}`);
-    lines.push(`  Código: ${p.barcode}   Total: ${total} ${p.unit||'un'}`);
-    ents.sort((a,b) => a.expiry.localeCompare(b.expiry)).forEach(e => {
-      const st = expStatus(e.expiry);
-      const flag = st.cls === 'etag-exp' ? '  ⚠ VENCIDO' : st.cls === 'etag-warn' ? '  ⚡ A VENCER' : '';
-      lines.push(`  · Validade: ${fmtDate(e.expiry)}  →  ${e.qty} ${p.unit||'un'}${flag}`);
-    });
-  });
-
-  if (uncatalogued.length) {
-    lines.push(`\n${'─'.repeat(54)}`);
-    lines.push('⚠ PRODUTOS SEM CADASTRO');
-    uncatalogued.forEach(e => {
-      const st = expStatus(e.expiry);
-      const flag = st.cls === 'etag-exp' ? '  ⚠ VENCIDO' : st.cls === 'etag-warn' ? '  ⚡ A VENCER' : '';
-      lines.push(`\n▸ Código: ${e.barcode}`);
-      lines.push(`  · Validade: ${fmtDate(e.expiry)}  →  ${e.qty} un${flag}`);
-    });
-  }
-
-  lines.push('\n' + '─'.repeat(54));
-  lines.push(`PRODUTOS COM ESTOQUE: ${withE.length}`);
-  lines.push(`PRODUTOS SEM CADASTRO: ${[...new Set(uncatalogued.map(e=>e.barcode))].length}`);
-  lines.push(`TOTAL DE UNIDADES: ${db.entries.reduce((s,e)=>s+e.qty,0)}`);
+  const lines = rows.map(r => `${r.barcode}|${r.name}|${expiryToShort(r.expiry)}|${r.qty}`);
   document.getElementById('report-preview').textContent = lines.join('\n');
 }
 
 function getCSVContent() {
-  const rows = [['Produto','Código de Barras','Categoria','Unidade','Data de Validade','Quantidade','Observação']];
+  const rows = [['Produto','Código de Barras','SKU','Categoria','Unidade','Data de Validade','Quantidade','Observação']];
   db.catalog.forEach(p => {
     const ents = db.entries.filter(e => e.productId === p.id);
     if (!ents.length) return;
     ents.sort((a,b) => a.expiry.localeCompare(b.expiry)).forEach(e => {
-      rows.push([p.name, p.barcode, p.category||'', p.unit||'un', fmtDate(e.expiry), e.qty, '']);
+      rows.push([p.name, p.barcode, p.sku||'', p.category||'', p.unit||'un', fmtDate(e.expiry), e.qty, '']);
     });
   });
   db.entries.filter(e => e._uncatalogued).forEach(e => {
-    rows.push(['SEM CADASTRO', e.barcode, '', 'un', fmtDate(e.expiry), e.qty, 'Produto não cadastrado no catálogo']);
+    rows.push(['SEM CADASTRO', e.barcode, '', '', 'un', fmtDate(e.expiry), e.qty, 'Produto não cadastrado no catálogo']);
   });
   return '\uFEFF' + rows.map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
 }
 
-function exportCSV() { dlFile('inventario_'+dateStr()+'.csv', getCSVContent(), 'text/csv;charset=utf-8'); showToast('CSV exportado ✓','success'); }
-function exportTXT() { buildReport(); dlFile('inventario_'+dateStr()+'.txt', document.getElementById('report-preview').textContent, 'text/plain;charset=utf-8'); showToast('TXT exportado ✓','success'); }
+function getContagemNome() {
+  return (document.getElementById('contagem-nome')?.value || '').trim() || 'inventario_' + dateStr();
+}
+
+function saveContagemNome() {
+  localStorage.setItem('estoquemax_contagem_nome', document.getElementById('contagem-nome').value);
+}
+
+function exportCSV() { dlFile(getContagemNome()+'.csv', getCSVContent(), 'text/csv;charset=utf-8'); showToast('CSV exportado ✓','success'); }
+
+function exportTXT() {
+  const nome = getContagemNome();
+  const rows = getAllEntryRows();
+  if (!rows.length) { showToast('Nenhum lançamento para exportar!', 'error'); return; }
+
+  // ── Arquivo 1: 4 colunas separadas por | ──
+  // barcode|nome|validade(DD-MM-AA)|quantidade
+  const txt1 = rows.map(r => {
+    const valFormatted = expiryToShort(r.expiry); // YYYY-MM-DD → DD-MM-YY
+    return `${r.barcode}|${r.name}|${valFormatted}|${r.qty}`;
+  }).join('\r\n');
+
+  // ── Arquivo 2: barcode(14 chars, pad direita com espaços);qty(5 dígitos, pad esquerda com zeros) ──
+  const txt2 = rows.map(r => {
+    const barPadded = r.barcode.padEnd(14, ' ');
+    const qtyPadded = String(r.qty).padStart(5, '0');
+    return `${barPadded};${qtyPadded}`;
+  }).join('\r\n');
+
+  // Download com pequeno intervalo entre os dois
+  dlFile(nome + '_validade.txt', txt1, 'text/plain;charset=utf-8');
+  setTimeout(() => {
+    dlFile(nome + '.txt', txt2, 'text/plain;charset=utf-8');
+  }, 400);
+
+  showToast('2 arquivos TXT exportados ✓', 'success');
+}
+
+// Retorna todas as linhas de lançamento (produtos catalogados + sem cadastro)
+function getAllEntryRows() {
+  const rows = [];
+  db.catalog.forEach(p => {
+    db.entries.filter(e => e.productId === p.id)
+      .sort((a,b) => a.expiry.localeCompare(b.expiry))
+      .forEach(e => rows.push({ barcode: p.barcode, name: p.name, expiry: e.expiry, qty: e.qty }));
+  });
+  db.entries.filter(e => e._uncatalogued).forEach(e => {
+    rows.push({ barcode: e.barcode, name: 'SEM CADASTRO', expiry: e.expiry, qty: e.qty });
+  });
+  return rows;
+}
+
+// YYYY-MM-DD → DD-MM-YY
+function expiryToShort(iso) {
+  if (!iso) return '';
+  const [y, m, d] = iso.split('-');
+  return `${d}-${m}-${y.slice(2)}`;
+}
+
 function shareWhatsApp() { buildReport(); window.open('https://wa.me/?text='+encodeURIComponent(document.getElementById('report-preview').textContent.substring(0,3000)),'_blank'); }
 function dlFile(name, content, type) { const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([content],{type})); a.download=name; a.click(); URL.revokeObjectURL(a.href); }
-function clearAllData() { if(!confirm('Apagar TODOS os lançamentos? O catálogo será mantido.')) return; db.entries=[]; save(); renderCatalog(); updateStats(); showToast('Estoque limpo','error'); }
+function confirmClearAllData() { openModal('clear-count-modal'); }
+
+function openEditEntry(entryId) {
+  const e = db.entries.find(x => x.id === entryId); if (!e) return;
+  document.getElementById('edit-entry-id').value = entryId;
+
+  let icon = '📦', name = '', barcode = '';
+  if (e._uncatalogued) {
+    icon = '❓'; name = 'Sem cadastro'; barcode = e.barcode;
+  } else {
+    const prod = db.catalog.find(p => p.id === e.productId);
+    if (prod) { icon = catEmoji(prod.category); name = prod.name; barcode = prod.barcode; }
+  }
+
+  document.getElementById('edit-entry-icon').textContent    = icon;
+  document.getElementById('edit-entry-name').textContent    = name;
+  document.getElementById('edit-entry-barcode').textContent = barcode;
+  document.getElementById('edit-entry-expiry').value        = fmtDate(e.expiry);
+  document.getElementById('edit-entry-qty').value           = e.qty;
+  openModal('edit-entry-modal');
+}
+
+function saveEditEntry() {
+  const id     = document.getElementById('edit-entry-id').value;
+  const expiry = parseDate(document.getElementById('edit-entry-expiry').value);
+  const qty    = parseInt(document.getElementById('edit-entry-qty').value) || 0;
+  if (!expiry) { showToast('Data inválida! Use DD/MM/AAAA', 'error'); return; }
+  if (qty < 1) { showToast('Quantidade deve ser maior que zero!', 'error'); return; }
+  const e = db.entries.find(x => x.id === id); if (!e) return;
+  e.expiry = expiry;
+  e.qty    = qty;
+  save(); renderCountList(); renderCatalog(); closeModal('edit-entry-modal');
+  showToast('Lançamento atualizado ✓', 'success');
+}
+
+function deleteEntryFromEdit() {
+  const id = document.getElementById('edit-entry-id').value;
+  db.entries = db.entries.filter(e => e.id !== id);
+  save(); renderCountList(); renderCatalog(); updateStats();
+  closeModal('edit-entry-modal');
+  showToast('Lançamento removido', 'error');
+}
+function clearAllData() {
+  closeModal('clear-count-modal');
+  db.entries = [];
+  save(); renderCountList(); updateStats(); showToast('Contagem limpa', 'error');
+}
 
 // ══════════════════════ MODALS ══════════════════════
 function openModal(id)  { document.getElementById(id).classList.add('open'); }
@@ -1014,9 +1230,30 @@ function showToast(msg, type='') {
   clearTimeout(_tt); _tt = setTimeout(() => t.className = 'toast', 2800);
 }
 
+// ══════════════════════ DATE MASK ══════════════════════
+function maskDate(input) {
+  let v = input.value.replace(/\D/g, '').slice(0, 8);
+  if (v.length >= 5)      v = v.slice(0,2) + '/' + v.slice(2,4) + '/' + v.slice(4);
+  else if (v.length >= 3) v = v.slice(0,2) + '/' + v.slice(2);
+  input.value = v;
+}
+
+// Convert DD/MM/AAAA → YYYY-MM-DD for internal storage
+function parseDate(str) {
+  if (!str) return '';
+  const parts = str.split('/');
+  if (parts.length !== 3 || parts[2].length !== 4) return '';
+  const [d, m, y] = parts;
+  if (!d || !m || !y) return '';
+  return `${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`;
+}
+
 // ══════════════════════ INIT ══════════════════════
 renderCountList();
 updateStats();
+document.getElementById('search-btn').style.display = 'flex'; // contagem is default tab
+const _savedNome = localStorage.getItem('estoquemax_contagem_nome');
+if (_savedNome) { const el = document.getElementById('contagem-nome'); if(el) el.value = _savedNome; }
 </script>
 </body>
 </html>
