@@ -182,6 +182,11 @@
 
   .divider { height: 1px; background: var(--border); margin: 12px 0; }
   .flex { display: flex; } .gap-8 { gap: 8px; } .flex-1 { flex: 1; }
+
+  /* Lightweight catalog list */
+  .cat-list-wrap { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; margin-bottom: 4px; }
+  .cat-row { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--border); }
+  .cat-row:last-child { border-bottom: none; }
 </style>
 </head>
 <body>
@@ -635,26 +640,21 @@ function updateStats() {
 }
 
 // ══════════════════════ CATALOG RENDER ══════════════════════
-function setFilter(f, el) {
-  catalogFilter = f;
-  document.querySelectorAll('.pill').forEach(p => p.classList.remove('active'));
-  el.classList.add('active');
-  renderCatalog();
-}
-
 function renderCatalog() {
   updateStats();
   const query = (document.getElementById('search-input')?.value || '').toLowerCase();
   const list = document.getElementById('catalog-list');
   const btnClear = document.getElementById('btn-clear-catalog');
 
-  // Show/hide Limpar Catálogo button
   btnClear.style.display = db.catalog.length > 0 ? 'flex' : 'none';
 
-  let prods = db.catalog.filter(p => {
-    if (query && !p.name.toLowerCase().includes(query) && !p.barcode.toLowerCase().includes(query) && !(p.sku||'').toLowerCase().includes(query)) return false;
-    return true;
-  });
+  const prods = query
+    ? db.catalog.filter(p =>
+        p.name.toLowerCase().includes(query) ||
+        p.barcode.includes(query) ||
+        (p.sku||'').toLowerCase().includes(query)
+      )
+    : db.catalog;
 
   if (!prods.length) {
     list.innerHTML = query
@@ -663,61 +663,34 @@ function renderCatalog() {
     return;
   }
 
-  // Limit render to 100 items to avoid freezing with large catalogs
-  const limited = !query && prods.length > 100;
-  const toRender = limited ? prods.slice(0, 100) : prods;
+  const LIMIT = 20;
+  const limited = prods.length > LIMIT;
+  const toRender = prods.slice(0, LIMIT);
 
-  list.innerHTML = toRender.map(p => {
-    const ents = db.entries.filter(e => e.productId === p.id);
-    const total = ents.reduce((s,e) => s + e.qty, 0);
-
-    const rows = ents.length
-      ? ents.sort((a,b) => (a.expiry||'').localeCompare(b.expiry||'')).map(e => {
-          const st = expStatus(e.expiry);
-          return `<div class="expiry-row">
-            <span class="expiry-date">${e.expiry ? fmtDate(e.expiry) : '<span style="color:var(--muted);font-style:italic">sem validade</span>'}</span>
-            <span class="expiry-qty">${e.qty}</span>
-            <span class="etag ${st.cls}">${st.label}</span>
-            <button class="btn-icon" style="width:24px;height:24px" onclick="delEntry('${e.id}')">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="10" height="10"><path d="M18 6L6 18M6 6l12 12"/></svg>
-            </button>
-          </div>`;
-        }).join('')
-      : `<p style="font-size:12px;color:var(--muted);padding:6px 0">Nenhum lançamento ainda.</p>`;
-
-    return `<div class="catalog-item">
-      <div class="catalog-header" onclick="toggleExp('ce-${p.id}')">
-        <div class="cat-icon">${catEmoji(p.category)}</div>
-        <div style="flex:1;min-width:0">
-          <div class="cat-name">${p.name}</div>
-          <div class="cat-code">${p.barcode}${p.sku ? ' &nbsp;·&nbsp; SKU: '+p.sku : ''}</div>
-        </div>
-        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:5px">
-          <span class="cat-badge${total===0?' zero':''}">${total} ${p.unit||'un'}</span>
-          <div class="flex gap-8">
-            <button class="btn-icon" style="width:24px;height:24px" onclick="event.stopPropagation();editProduct('${p.id}')">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="10" height="10"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-            </button>
-            <button class="btn-icon" style="width:24px;height:24px;color:var(--danger)" onclick="event.stopPropagation();delProduct('${p.id}')">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="10" height="10"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
-            </button>
-          </div>
-        </div>
+  // Lightweight rows — no expand panels, no icons, no inline forms
+  const rows = toRender.map(p =>
+    `<div class="cat-row">
+      <div style="flex:1;min-width:0">
+        <div class="cat-name" style="font-size:13px">${p.name}</div>
+        <div class="cat-code">${p.barcode}${p.sku ? ' · SKU: '+p.sku : ''}</div>
       </div>
-      <div class="cat-expiries" id="ce-${p.id}">
-        ${rows}
-        <div class="divider" style="margin-bottom:8px"></div>
-        <div class="exp-add-row">
-          <input type="text" id="d-${p.id}" placeholder="DD/MM/AAAA" maxlength="10" inputmode="numeric" oninput="maskDate(this)" style="font-size:12px;padding:7px 9px">
-          <input type="number" id="q-${p.id}" value="1" min="1" style="font-size:12px;padding:7px 8px;text-align:center">
-          <button class="btn btn-primary btn-sm" onclick="addDirectEntry('${p.id}')">+ Add</button>
-        </div>
+      <div class="flex gap-8" style="flex-shrink:0;align-items:center">
+        <button class="btn-icon" style="width:26px;height:26px" onclick="editProduct('${p.id}')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="11" height="11"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+        </button>
+        <button class="btn-icon" style="width:26px;height:26px;color:var(--danger)" onclick="delProduct('${p.id}')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="11" height="11"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+        </button>
       </div>
-    </div>`;
-  }).join('') + (limited ? `<p style="text-align:center;font-size:12px;color:var(--muted);padding:12px 0">Mostrando 100 de ${prods.length} produtos. Use a busca para encontrar os demais.</p>` : '');
+    </div>`
+  ).join('');
+
+  const note = limited
+    ? `<p style="text-align:center;font-size:12px;color:var(--muted);padding:10px 0">Mostrando ${LIMIT} de ${prods.length} produtos. Use a busca para encontrar os demais.</p>`
+    : '';
+
+  list.innerHTML = `<div class="cat-list-wrap">${rows}</div>${note}`;
 }
-
-function toggleExp(id) { document.getElementById(id)?.classList.toggle('open'); }
 
 // ══════════════════════ PRODUCT CRUD ══════════════════════
 function openAddProduct(barcode = '') {
@@ -1047,33 +1020,36 @@ async function confirmImport() {
   btn.disabled = true;
   btn.textContent = '⏳ Importando...';
 
+  // Build a Set of normalized existing codes for O(1) lookup
+  const existingCodes = new Set(db.catalog.map(p => normCode(p.barcode)));
+
   let added = 0, skipped = 0;
-  const BATCH = 500; // process 500 at a time to keep UI responsive
+  const BATCH = 2000; // larger batches are fine now with O(1) lookup
 
   for (let i = 0; i < pendingImport.length; i += BATCH) {
     const batch = pendingImport.slice(i, i + BATCH);
-    batch.forEach(p => {
-      if (findProduct(p.barcode)) { skipped++; return; }
+    const ts = Date.now();
+    batch.forEach((p, j) => {
+      const n = normCode(p.barcode);
+      if (existingCodes.has(n)) { skipped++; return; }
+      existingCodes.add(n);
       db.catalog.push({
-        id: Date.now().toString() + Math.random().toString(36).slice(2,6),
+        id: `${ts}${i+j}`,
         barcode: p.barcode, name: p.name, sku: p.sku || '',
         category: '', unit: 'un', source: 'import'
       });
       added++;
     });
 
-    // Update progress feedback every batch
     const done = Math.min(i + BATCH, pendingImport.length);
     btn.textContent = `⏳ ${done} / ${pendingImport.length}...`;
     res.className = 'import-result import-ok';
     res.style.display = 'block';
     res.innerHTML = `⏳ Importando... <strong>${done}</strong> de ${pendingImport.length}`;
 
-    // Yield to browser so UI doesn't freeze
     await new Promise(r => setTimeout(r, 0));
   }
 
-  // Save once at the end (not inside the loop)
   save();
   updateStats();
 
