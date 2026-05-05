@@ -435,8 +435,8 @@
     </div>
 
     <div class="form-group">
-      <label>Data de Validade</label>
-      <input type="text" id="count-expiry" placeholder="DD/MM/AAAA" maxlength="10" inputmode="numeric" oninput="maskDate(this)">
+      <label>Data de Validade <span style="color:var(--muted);font-weight:400;font-size:11px">(opcional)</span></label>
+      <input type="text" id="count-expiry" placeholder="DD/MM/AAAA — deixe vazio se não houver" maxlength="10" inputmode="numeric" oninput="maskDate(this)">
     </div>
     <div class="form-group" style="margin-bottom:0">
       <label>Quantidade</label>
@@ -668,10 +668,10 @@ function renderCatalog() {
     const total = ents.reduce((s,e) => s + e.qty, 0);
 
     const rows = ents.length
-      ? ents.sort((a,b) => a.expiry.localeCompare(b.expiry)).map(e => {
+      ? ents.sort((a,b) => (a.expiry||'').localeCompare(b.expiry||'')).map(e => {
           const st = expStatus(e.expiry);
           return `<div class="expiry-row">
-            <span class="expiry-date">${fmtDate(e.expiry)}</span>
+            <span class="expiry-date">${e.expiry ? fmtDate(e.expiry) : '<span style="color:var(--muted);font-style:italic">sem validade</span>'}</span>
             <span class="expiry-qty">${e.qty}</span>
             <span class="etag ${st.cls}">${st.label}</span>
             <button class="btn-icon" style="width:24px;height:24px" onclick="delEntry('${e.id}')">
@@ -891,12 +891,13 @@ function registerFromNotFound() {
 
 function addCountEntry() {
   if (!countProduct) return;
-  const expiry = parseDate(document.getElementById('count-expiry').value);
-  const qty    = parseInt(document.getElementById('count-qty').value) || 1;
-  if (!expiry) { showToast('Data inválida! Use DD/MM/AAAA', 'error'); return; }
+  const rawExpiry = document.getElementById('count-expiry').value.trim();
+  // Allow empty (no expiry). Only validate if something was typed.
+  const expiry = rawExpiry ? parseDate(rawExpiry) : '';
+  if (rawExpiry && !expiry) { showToast('Data inválida! Use DD/MM/AAAA', 'error'); return; }
+  const qty = parseInt(document.getElementById('count-qty').value) || 1;
 
   if (countProduct._uncatalogued) {
-    // Save as uncatalogued entry: store directly with barcode as productId marker
     const existing = db.entries.find(e => e.productId === countProduct.id && e.expiry === expiry);
     if (existing) { existing.qty += qty; showToast('Quantidade somada ✓', 'success'); }
     else {
@@ -909,7 +910,7 @@ function addCountEntry() {
         addedAt: new Date().toISOString(),
         _uncatalogued: true
       });
-      showToast(`Lançado sem cadastro ✓`, 'success');
+      showToast('Lançado sem cadastro ✓', 'success');
     }
   } else {
     const existing = db.entries.find(e => e.productId === countProduct.id && e.expiry === expiry);
@@ -953,11 +954,12 @@ function renderCountList() {
   list.innerHTML = recent.map(e => {
     const st = expStatus(e.expiry);
     if (e._uncatalogued) {
+      const valLabel = e.expiry ? `Val: ${fmtDate(e.expiry)}&nbsp;<span class="etag ${st.cls}" style="padding:1px 6px">${st.label}</span>` : `<span style="color:var(--muted);font-style:italic">sem validade</span>`;
       return `<div class="count-item" style="border-color:var(--warn);cursor:pointer" onclick="openEditEntry('${e.id}')">
         <div class="count-icon">❓</div>
         <div class="count-info">
           <div class="count-name" style="color:var(--warn)">${e.barcode}</div>
-          <div class="count-detail">Sem cadastro · Val: ${fmtDate(e.expiry)}&nbsp;<span class="etag ${st.cls}" style="padding:1px 6px">${st.label}</span></div>
+          <div class="count-detail">Sem cadastro · ${valLabel}</div>
         </div>
         <div style="display:flex;align-items:center;gap:8px">
           <div class="count-qty">${e.qty}<span style="font-size:10px;color:var(--muted);font-family:inherit">&nbsp;un</span></div>
@@ -967,11 +969,12 @@ function renderCountList() {
     }
     const prod = db.catalog.find(p => p.id === e.productId);
     if (!prod) return '';
+    const valLabel = e.expiry ? `Val: ${fmtDate(e.expiry)}&nbsp;&nbsp;<span class="etag ${st.cls}" style="padding:1px 6px">${st.label}</span>` : `<span style="color:var(--muted);font-style:italic">sem validade</span>`;
     return `<div class="count-item" style="cursor:pointer" onclick="openEditEntry('${e.id}')">
       <div class="count-icon">${catEmoji(prod.category)}</div>
       <div class="count-info">
         <div class="count-name">${prod.name}</div>
-        <div class="count-detail">Val: ${fmtDate(e.expiry)}&nbsp;&nbsp;<span class="etag ${st.cls}" style="padding:1px 6px">${st.label}</span></div>
+        <div class="count-detail">${valLabel}</div>
       </div>
       <div style="display:flex;align-items:center;gap:8px">
         <div class="count-qty">${e.qty}<span style="font-size:10px;color:var(--muted);font-family:inherit">&nbsp;${prod.unit||'un'}</span></div>
@@ -1169,11 +1172,11 @@ function getAllEntryRows() {
   const rows = [];
   db.catalog.forEach(p => {
     db.entries.filter(e => e.productId === p.id)
-      .sort((a,b) => a.expiry.localeCompare(b.expiry))
-      .forEach(e => rows.push({ barcode: p.barcode, name: p.name, expiry: e.expiry, qty: e.qty }));
+      .sort((a,b) => (a.expiry||'').localeCompare(b.expiry||''))
+      .forEach(e => rows.push({ barcode: p.barcode, name: p.name, expiry: e.expiry||'', qty: e.qty }));
   });
   db.entries.filter(e => e._uncatalogued).forEach(e => {
-    rows.push({ barcode: e.barcode, name: 'SEM CADASTRO', expiry: e.expiry, qty: e.qty });
+    rows.push({ barcode: e.barcode, name: '', expiry: e.expiry||'', qty: e.qty });
   });
   return rows;
 }
@@ -1210,10 +1213,11 @@ function openEditEntry(entryId) {
 }
 
 function saveEditEntry() {
-  const id     = document.getElementById('edit-entry-id').value;
-  const expiry = parseDate(document.getElementById('edit-entry-expiry').value);
-  const qty    = parseInt(document.getElementById('edit-entry-qty').value) || 0;
-  if (!expiry) { showToast('Data inválida! Use DD/MM/AAAA', 'error'); return; }
+  const id      = document.getElementById('edit-entry-id').value;
+  const rawExp  = document.getElementById('edit-entry-expiry').value.trim();
+  const expiry  = rawExp ? parseDate(rawExp) : '';
+  const qty     = parseInt(document.getElementById('edit-entry-qty').value) || 0;
+  if (rawExp && !expiry) { showToast('Data inválida! Use DD/MM/AAAA', 'error'); return; }
   if (qty < 1) { showToast('Quantidade deve ser maior que zero!', 'error'); return; }
   const e = db.entries.find(x => x.id === id); if (!e) return;
   e.expiry = expiry;
