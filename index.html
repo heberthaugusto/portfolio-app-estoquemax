@@ -976,30 +976,43 @@ function hideManualEntry() {
 function onSkuSearch(query) {
   const resultsEl = document.getElementById('sku-results');
   const q = query.trim().toLowerCase();
-  if (!q || q.length < 2) { resultsEl.style.display = 'none'; return; }
+  if (!q || q.length < 1) { resultsEl.style.display = 'none'; return; }
 
-  const matches = db.catalog.filter(p =>
-    (p.sku && p.sku.toLowerCase().includes(q)) ||
-    p.name.toLowerCase().includes(q)
-  ).slice(0, 8);
+  // Split into priority buckets
+  const exactSku    = []; // SKU === query (exact)
+  const startsSkU   = []; // SKU starts with query
+  const containsSku = []; // SKU contains query
+  const nameMatch   = []; // name contains query (no SKU match)
 
-  if (!matches.length) {
-    resultsEl.style.display = 'none';
-    return;
+  for (const p of db.catalog) {
+    const sku  = (p.sku || '').toLowerCase();
+    const name = p.name.toLowerCase();
+    if (sku === q)                          exactSku.push(p);
+    else if (sku && sku.startsWith(q))      startsSkU.push(p);
+    else if (sku && sku.includes(q))        containsSku.push(p);
+    else if (name.includes(q))              nameMatch.push(p);
   }
 
-  resultsEl.innerHTML = matches.map(p => `
-    <div onclick="selectSkuResult('${p.barcode}','${p.name.replace(/'/g,"\\'")}','${p.sku||''}')"
-      style="padding:10px 14px;cursor:pointer;border-bottom:1px solid var(--border);transition:background 0.15s"
+  const matches = [...exactSku, ...startsSkU, ...containsSku, ...nameMatch].slice(0, 10);
+
+  if (!matches.length) { resultsEl.style.display = 'none'; return; }
+
+  resultsEl.innerHTML = matches.map(p => {
+    const skuTag = p.sku
+      ? `<span style="background:rgba(0,212,170,0.12);color:var(--accent);padding:1px 6px;border-radius:4px;font-size:10px;font-weight:600">SKU ${p.sku}</span>`
+      : '';
+    return `<div onclick="selectSkuResult('${p.barcode.replace(/'/g,"\\'")}','${p.name.replace(/'/g,"\\'")}','${(p.sku||'').replace(/'/g,"\\'")}')"
+      style="padding:10px 14px;cursor:pointer;border-bottom:1px solid var(--border);transition:background 0.15s;display:flex;align-items:center;gap:10px"
       onmouseenter="this.style.background='rgba(0,212,170,0.08)'"
       onmouseleave="this.style.background=''"
     >
-      <div style="font-size:13px;font-weight:600;color:var(--text)">${p.name}</div>
-      <div style="font-size:11px;color:var(--muted);font-family:'JetBrains Mono',monospace;margin-top:2px">
-        ${p.barcode}${p.sku ? ' &nbsp;·&nbsp; SKU: '+p.sku : ''}
+      <div style="flex:1;min-width:0">
+        <div style="font-size:13px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.name}</div>
+        <div style="font-size:11px;color:var(--muted);font-family:'JetBrains Mono',monospace;margin-top:2px">${p.barcode}</div>
       </div>
-    </div>
-  `).join('');
+      ${skuTag}
+    </div>`;
+  }).join('');
   resultsEl.style.display = 'block';
 }
 
