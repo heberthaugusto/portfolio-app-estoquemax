@@ -596,7 +596,7 @@ let searchVisible = false;
 // ══════════════════════ INDEXEDDB ══════════════════════
 function openIDB() {
   return new Promise((resolve, reject) => {
-    const req = indexedDB.open('estoquemax', 4);
+    const req = indexedDB.open('estoquemax', 5);
     req.onupgradeneeded = e => {
       const d = e.target.result;
       if (!d.objectStoreNames.contains('catalog')) {
@@ -670,7 +670,7 @@ function searchCatalogIDB(query, limit = 20) {
   });
 }
 
-// Get one product by barcode (normalized)
+// Get one product by barcode — reliable cursor scan
 function findByBarcodeIDB(barcode) {
   return new Promise((resolve, reject) => {
     const norm = normCode(barcode);
@@ -679,7 +679,10 @@ function findByBarcodeIDB(barcode) {
     req.onsuccess = e => {
       const cursor = e.target.result;
       if (!cursor) { resolve(null); return; }
-      if (normCode(cursor.value.barcode) === norm) { resolve(cursor.value); return; }
+      const stored = cursor.value.barcode;
+      if (stored === barcode || normCode(stored) === norm) {
+        resolve(cursor.value); return;
+      }
       cursor.continue();
     };
     req.onerror = e => reject(e.target.error);
@@ -762,10 +765,6 @@ function normCode(c) {
   const stripped = s.replace(/^0+/, '');
   // If stripping all zeros leaves empty string, the code is all zeros — keep original length to avoid collision
   return stripped || s;
-}
-
-function findProduct(barcode) {
-  return findProductIDB(barcode);
 }
 
 function fmtDate(s) {
@@ -1049,8 +1048,6 @@ function hideManualEntry() {
   if (scanner) { scanner.resume(); }
 }
 
-
-
 async function selectSkuResult(barcode, name, sku) {
   document.getElementById('sku-results').style.display = 'none';
   // Stop scanner if running
@@ -1200,11 +1197,11 @@ function parseTxt(text) {
     if (!line) return;
     const parts = line.split('|');
     if (parts.length < 2) { invalid++; return; }
-    const code = parts[0].trim();
-    const name = parts[1].trim().replace(/\s+/g, ' ');
-    const sku  = parts[2] ? parts[2].trim() : '';
-    if (!code || !name) { invalid++; return; }
-    pendingImport.push({ barcode: code, name, sku });
+    const barcode = parts[0].trim();
+    const name    = parts[1].trim().replace(/\s+/g, ' ');
+    const sku     = parts[2] ? parts[2].trim() : '';
+    if (!barcode || !name) { invalid++; return; }
+    pendingImport.push({ barcode, name, sku });
   });
 
   const prev = document.getElementById('import-preview');
