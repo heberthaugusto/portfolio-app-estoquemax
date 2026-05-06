@@ -1051,10 +1051,11 @@ function hideManualEntry() {
 
 
 
-function selectSkuResult(barcode, name, sku) {
-  document.getElementById('manual-barcode').value = barcode;
-  document.getElementById('sku-search-input').value = sku ? `SKU: ${sku} — ${name}` : name;
+async function selectSkuResult(barcode, name, sku) {
   document.getElementById('sku-results').style.display = 'none';
+  // Close scanner modal and go directly to count form
+  stopScanner();
+  await onScan(barcode);
 }
 
 function submitManualBarcode() {
