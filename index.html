@@ -596,11 +596,20 @@ let searchVisible = false;
 // ══════════════════════ INDEXEDDB ══════════════════════
 function openIDB() {
   return new Promise((resolve, reject) => {
-    const req = indexedDB.open('estoquemax', 2);
+    const req = indexedDB.open('estoquemax', 3);
     req.onupgradeneeded = e => {
       const d = e.target.result;
       if (!d.objectStoreNames.contains('catalog')) {
-        d.createObjectStore('catalog', { keyPath: 'id' });
+        const store = d.createObjectStore('catalog', { keyPath: 'id' });
+        store.createIndex('barcode', 'barcode', { unique: false });
+        store.createIndex('sku',     'sku',     { unique: false });
+        store.createIndex('name',    'name',    { unique: false });
+      } else {
+        // Add indexes if upgrading
+        const store = e.target.transaction.objectStore('catalog');
+        if (!store.indexNames.contains('barcode')) store.createIndex('barcode','barcode',{unique:false});
+        if (!store.indexNames.contains('sku'))     store.createIndex('sku','sku',{unique:false});
+        if (!store.indexNames.contains('name'))     store.createIndex('name','name',{unique:false});
       }
     };
     req.onsuccess = e => resolve(e.target.result);
@@ -608,18 +617,51 @@ function openIDB() {
   });
 }
 
-async function loadCatalogFromIDB() {
+// Count records without loading all data
+function countCatalogIDB() {
   return new Promise((resolve, reject) => {
-    const tx = idb.transaction('catalog', 'readonly');
-    const req = tx.objectStore('catalog').getAll();
+    const tx  = idb.transaction('catalog','readonly');
+    const req = tx.objectStore('catalog').count();
     req.onsuccess = e => resolve(e.target.result);
     req.onerror   = e => reject(e.target.error);
   });
 }
 
+// Search IDB using cursor — returns up to `limit` results matching fn
+function searchCatalogIDB(filterFn, limit = 20) {
+  return new Promise((resolve, reject) => {
+    const results = [];
+    const tx  = idb.transaction('catalog','readonly');
+    const req = tx.objectStore('catalog').openCursor();
+    req.onsuccess = e => {
+      const cursor = e.target.result;
+      if (!cursor || results.length >= limit) { resolve(results); return; }
+      if (filterFn(cursor.value)) results.push(cursor.value);
+      cursor.continue();
+    };
+    req.onerror = e => reject(e.target.error);
+  });
+}
+
+// Get one product by barcode (normalized)
+function findByBarcodeIDB(barcode) {
+  return new Promise((resolve, reject) => {
+    const norm = normCode(barcode);
+    const tx   = idb.transaction('catalog','readonly');
+    const req  = tx.objectStore('catalog').openCursor();
+    req.onsuccess = e => {
+      const cursor = e.target.result;
+      if (!cursor) { resolve(null); return; }
+      if (normCode(cursor.value.barcode) === norm) { resolve(cursor.value); return; }
+      cursor.continue();
+    };
+    req.onerror = e => reject(e.target.error);
+  });
+}
+
 async function saveCatalogToIDB(items) {
   return new Promise((resolve, reject) => {
-    const tx = idb.transaction('catalog', 'readwrite');
+    const tx    = idb.transaction('catalog','readwrite');
     const store = tx.objectStore('catalog');
     items.forEach(p => store.put(p));
     tx.oncomplete = resolve;
@@ -627,10 +669,10 @@ async function saveCatalogToIDB(items) {
   });
 }
 
-async function clearCatalogIDB() {
+async function updateOneInIDB(item) {
   return new Promise((resolve, reject) => {
-    const tx = idb.transaction('catalog', 'readwrite');
-    tx.objectStore('catalog').clear();
+    const tx = idb.transaction('catalog','readwrite');
+    tx.objectStore('catalog').put(item);
     tx.oncomplete = resolve;
     tx.onerror    = e => reject(e.target.error);
   });
@@ -638,28 +680,53 @@ async function clearCatalogIDB() {
 
 async function deleteFromIDB(id) {
   return new Promise((resolve, reject) => {
-    const tx = idb.transaction('catalog', 'readwrite');
+    const tx = idb.transaction('catalog','readwrite');
     tx.objectStore('catalog').delete(id);
     tx.oncomplete = resolve;
     tx.onerror    = e => reject(e.target.error);
   });
 }
 
+async function clearCatalogIDB() {
+  return new Promise((resolve, reject) => {
+    const tx = idb.transaction('catalog','readwrite');
+    tx.objectStore('catalog').clear();
+    tx.oncomplete = resolve;
+    tx.onerror    = e => reject(e.target.error);
+  });
+}
+
+// Get all records (only used for export)
+function getAllCatalogIDB() {
+  return new Promise((resolve, reject) => {
+    const tx  = idb.transaction('catalog','readonly');
+    const req = tx.objectStore('catalog').getAll();
+    req.onsuccess = e => resolve(e.target.result);
+    req.onerror   = e => reject(e.target.error);
+  });
+}
+
 function saveEntries() {
-  try {
-    localStorage.setItem('estoquemax_entries', JSON.stringify(db.entries));
-  } catch(e) {
-    showToast('Erro ao salvar lançamentos!', 'error');
-  }
+  try { localStorage.setItem('estoquemax_entries', JSON.stringify(db.entries)); }
+  catch(e) { showToast('Erro ao salvar lançamentos!','error'); }
 }
-
-// save() called after catalog changes — saves one product or array
-async function saveCatalogItem(item) {
-  await saveCatalogToIDB(Array.isArray(item) ? item : [item]);
-}
-
-// Legacy full save (for entries only now)
 function save() { saveEntries(); }
+async function saveCatalogItem(item) { await updateOneInIDB(item); }
+
+// Get single product by id
+function getByIdIDB(id) {
+  return new Promise((resolve, reject) => {
+    const tx  = idb.transaction('catalog','readonly');
+    const req = tx.objectStore('catalog').get(id);
+    req.onsuccess = e => resolve(e.target.result || null);
+    req.onerror   = e => reject(e.target.error);
+  });
+}
+
+// findProduct: check IDB by barcode — returns promise
+function findProduct(barcode) {
+  return findProductIDB(barcode);
+}
 
 // ══════════════════════ UTILS ══════════════════════
 // Normalize barcode: strip leading zeros for comparison
@@ -671,8 +738,7 @@ function normCode(c) {
 }
 
 function findProduct(barcode) {
-  const n = normCode(barcode);
-  return db.catalog.find(p => normCode(p.barcode) === n);
+  return findProductIDB(barcode);
 }
 
 function fmtDate(s) {
@@ -743,25 +809,19 @@ function onSearchInput() {
 
 // ══════════════════════ STATS ══════════════════════
 function updateStats() {
-  document.getElementById('stat-catalog').textContent = db.catalog.length;
+  document.getElementById('stat-catalog').textContent = db.catalogCount || 0;
 }
 
 // ══════════════════════ CATALOG RENDER ══════════════════════
-function renderCatalog() {
+async function renderCatalog() {
   updateStats();
-  const query = (document.getElementById('search-input')?.value || '').toLowerCase();
-  const list = document.getElementById('catalog-list');
+  const query    = (document.getElementById('search-input')?.value || '').toLowerCase();
+  const list     = document.getElementById('catalog-list');
   const btnClear = document.getElementById('btn-clear-catalog');
+  btnClear.style.display = (db.catalogCount || 0) > 0 ? 'flex' : 'none';
 
-  btnClear.style.display = db.catalog.length > 0 ? 'flex' : 'none';
-
-  const prods = query
-    ? db.catalog.filter(p =>
-        p.name.toLowerCase().includes(query) ||
-        p.barcode.includes(query) ||
-        (p.sku||'').toLowerCase().includes(query)
-      )
-    : db.catalog;
+  const LIMIT = 20;
+  const prods = query ? await searchCatalogIDB(query, LIMIT) : await getFirstNFromIDB(LIMIT);
 
   if (!prods.length) {
     list.innerHTML = query
@@ -770,19 +830,15 @@ function renderCatalog() {
     return;
   }
 
-  const LIMIT = 20;
-  const limited = prods.length > LIMIT;
-  const toRender = prods.slice(0, LIMIT);
-
-  // Lightweight rows — no expand panels, no icons, no inline forms
-  const rows = toRender.map(p =>
+  const limited = !query && (db.catalogCount || 0) > LIMIT;
+  const rows = prods.map(p =>
     `<div class="cat-row">
       <div style="flex:1;min-width:0">
         <div class="cat-name" style="font-size:13px">${p.name}</div>
         <div class="cat-code">${p.barcode}${p.sku ? ' · SKU: '+p.sku : ''}</div>
       </div>
       <div class="flex gap-8" style="flex-shrink:0;align-items:center">
-        <button class="btn-icon" style="width:26px;height:26px" onclick="editProduct('${p.id}')">
+        <button class="btn-icon" style="width:26px;height:26px" onclick="editProductById('${p.id}')">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="11" height="11"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
         </button>
         <button class="btn-icon" style="width:26px;height:26px;color:var(--danger)" onclick="delProduct('${p.id}')">
@@ -793,9 +849,8 @@ function renderCatalog() {
   ).join('');
 
   const note = limited
-    ? `<p style="text-align:center;font-size:12px;color:var(--muted);padding:10px 0">Mostrando ${LIMIT} de ${prods.length} produtos. Use a busca para encontrar os demais.</p>`
+    ? `<p style="text-align:center;font-size:12px;color:var(--muted);padding:10px 0">Mostrando ${LIMIT} de ${db.catalogCount} produtos. Use a busca para encontrar os demais.</p>`
     : '';
-
   list.innerHTML = `<div class="cat-list-wrap">${rows}</div>${note}`;
 }
 
@@ -811,8 +866,8 @@ function openAddProduct(barcode = '') {
   openModal('product-modal');
 }
 
-function editProduct(id) {
-  const p = db.catalog.find(x => x.id === id); if (!p) return;
+async function editProductById(id) {
+  const p = await getByIdIDB(id); if (!p) return;
   document.getElementById('edit-id').value   = p.id;
   document.getElementById('product-modal-title').textContent = '✏️ Editar Produto';
   document.getElementById('p-barcode').value  = p.barcode;
@@ -832,17 +887,17 @@ async function saveProduct() {
   const editId   = document.getElementById('edit-id').value;
   if (!barcode || !name) { showToast('Preencha código e nome!', 'error'); return; }
   if (editId) {
-    const p = db.catalog.find(x => x.id === editId);
+    const p = await getByIdIDB(editId);
     if (p) {
       Object.assign(p, { barcode, name, sku, category, unit });
       await saveCatalogItem(p);
     }
     showToast('Produto atualizado ✓', 'success');
   } else {
-    if (findProduct(barcode)) { showToast('Código já cadastrado!', 'error'); return; }
+    if (await findProduct(barcode)) { showToast('Código já cadastrado!', 'error'); return; }
     const item = { id: Date.now().toString(), barcode, name, sku, category, unit, source:'manual' };
-    db.catalog.push(item);
     await saveCatalogItem(item);
+    db.catalogCount = (db.catalogCount || 0) + 1;
     showToast('Produto cadastrado ✓', 'success');
   }
   closeModal('product-modal'); renderCatalog(); updateStats();
@@ -850,9 +905,9 @@ async function saveProduct() {
 
 async function delProduct(id) {
   if (!confirm('Remover produto e seus lançamentos?')) return;
-  db.catalog  = db.catalog.filter(p => p.id !== id);
   db.entries  = db.entries.filter(e => e.productId !== id);
   await deleteFromIDB(id);
+  db.catalogCount = Math.max(0, (db.catalogCount || 1) - 1);
   saveEntries();
   renderCatalog(); updateStats(); showToast('Removido', 'error');
 }
@@ -888,22 +943,16 @@ function openScanner(mode) {
   }, 320);
 }
 
-function onScan(code) {
+async function onScan(code) {
   stopScanner();
   if (scannerMode === 'barcode-product') {
     document.getElementById('p-barcode').value = code;
     openModal('product-modal');
     return;
   }
-  // mode = count
-  const prod = findProduct(code);
-  if (prod) {
-    showFoundProduct(prod);
-  } else {
-    // Produto não cadastrado: abre direto o formulário de contagem
-    notFoundCode = code;
-    countWithoutCatalog();
-  }
+  const prod = await findProduct(code);
+  if (prod) { showFoundProduct(prod); }
+  else { notFoundCode = code; countWithoutCatalog(); }
 }
 
 function stopScanner() {
@@ -973,48 +1022,7 @@ function hideManualEntry() {
   if (scanner) { scanner.resume(); }
 }
 
-function onSkuSearch(query) {
-  const resultsEl = document.getElementById('sku-results');
-  const q = query.trim().toLowerCase();
-  if (!q || q.length < 1) { resultsEl.style.display = 'none'; return; }
 
-  // Split into priority buckets
-  const exactSku    = []; // SKU === query (exact)
-  const startsSkU   = []; // SKU starts with query
-  const containsSku = []; // SKU contains query
-  const nameMatch   = []; // name contains query (no SKU match)
-
-  for (const p of db.catalog) {
-    const sku  = (p.sku || '').toLowerCase();
-    const name = p.name.toLowerCase();
-    if (sku === q)                          exactSku.push(p);
-    else if (sku && sku.startsWith(q))      startsSkU.push(p);
-    else if (sku && sku.includes(q))        containsSku.push(p);
-    else if (name.includes(q))              nameMatch.push(p);
-  }
-
-  const matches = [...exactSku, ...startsSkU, ...containsSku, ...nameMatch].slice(0, 10);
-
-  if (!matches.length) { resultsEl.style.display = 'none'; return; }
-
-  resultsEl.innerHTML = matches.map(p => {
-    const skuTag = p.sku
-      ? `<span style="background:rgba(0,212,170,0.12);color:var(--accent);padding:1px 6px;border-radius:4px;font-size:10px;font-weight:600">SKU ${p.sku}</span>`
-      : '';
-    return `<div onclick="selectSkuResult('${p.barcode.replace(/'/g,"\\'")}','${p.name.replace(/'/g,"\\'")}','${(p.sku||'').replace(/'/g,"\\'")}')"
-      style="padding:10px 14px;cursor:pointer;border-bottom:1px solid var(--border);transition:background 0.15s;display:flex;align-items:center;gap:10px"
-      onmouseenter="this.style.background='rgba(0,212,170,0.08)'"
-      onmouseleave="this.style.background=''"
-    >
-      <div style="flex:1;min-width:0">
-        <div style="font-size:13px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.name}</div>
-        <div style="font-size:11px;color:var(--muted);font-family:'JetBrains Mono',monospace;margin-top:2px">${p.barcode}</div>
-      </div>
-      ${skuTag}
-    </div>`;
-  }).join('');
-  resultsEl.style.display = 'block';
-}
 
 function selectSkuResult(barcode, name, sku) {
   document.getElementById('manual-barcode').value = barcode;
@@ -1074,7 +1082,7 @@ function addCountEntry() {
   setTimeout(() => openCountScanner(), 600);
 }
 
-function renderCountList() {
+async function renderCountList() {
   const list    = document.getElementById('count-list');
   const hdr     = document.getElementById('count-list-hdr');
   const clearEl = document.getElementById('clear-count-area');
@@ -1086,11 +1094,19 @@ function renderCountList() {
     .sort((a,b) => new Date(b.addedAt) - new Date(a.addedAt))
     .slice(0, 30);
 
+  // Build small product lookup for only the entries we need (avoids loading all 63k)
+  const productIds = [...new Set(recent.filter(e => !e._uncatalogued).map(e => e.productId))];
+  const prodMap = {};
+  for (const pid of productIds) {
+    const p = await getByIdIDB(pid);
+    if (p) prodMap[pid] = p;
+  }
+
   // Filter by search query
   if (query) {
     recent = recent.filter(e => {
       if (e._uncatalogued) return e.barcode.includes(query);
-      const prod = db.catalog.find(p => p.id === e.productId);
+      const prod = prodMap[e.productId];
       return prod && (prod.name.toLowerCase().includes(query) || prod.barcode.includes(query) || (prod.sku||'').toLowerCase().includes(query));
     });
   }
@@ -1115,7 +1131,7 @@ function renderCountList() {
         </div>
       </div>`;
     }
-    const prod = db.catalog.find(p => p.id === e.productId);
+    const prod = prodMap[e.productId];
     if (!prod) return '';
     const valLabel = e.expiry ? `Val: ${fmtDate(e.expiry)}&nbsp;&nbsp;<span class="etag ${st.cls}" style="padding:1px 6px">${st.label}</span>` : `<span style="color:var(--muted);font-style:italic">sem validade</span>`;
     return `<div class="count-item" style="cursor:pointer" onclick="openEditEntry('${e.id}')">
@@ -1191,8 +1207,9 @@ async function confirmImport() {
   btn.disabled = true;
   btn.textContent = '⏳ Importando...';
 
-  // Build Set of existing codes for O(1) lookup
-  const existingCodes = new Set(db.catalog.map(p => normCode(p.barcode)));
+  // Build Set of existing codes from IDB for O(1) duplicate check
+  const allExisting = await getAllCatalogIDB();
+  const existingCodes = new Set(allExisting.map(p => normCode(p.barcode)));
 
   let added = 0, skipped = 0;
   const BATCH = 2000;
@@ -1211,7 +1228,6 @@ async function confirmImport() {
         barcode: p.barcode, name: p.name, sku: p.sku || '',
         category: '', unit: 'un', source: 'import'
       };
-      db.catalog.push(item);
       newItems.push(item);
       added++;
     });
@@ -1228,6 +1244,8 @@ async function confirmImport() {
     await new Promise(r => setTimeout(r, 0));
   }
 
+  // Save once at end, update count
+  db.catalogCount = (db.catalogCount || 0) + added;
   updateStats();
   pendingImport = [];
   document.getElementById('import-preview').style.display = 'none';
@@ -1245,9 +1263,9 @@ async function confirmImport() {
 }
 
 function refreshImportStats() {
-  document.getElementById('imp-stat-cat').textContent    = db.catalog.length;
+  document.getElementById('imp-stat-cat').textContent    = db.catalogCount || 0;
   document.getElementById('imp-stat-stock').textContent  =
-    db.catalog.filter(p => db.entries.some(e => e.productId === p.id)).length;
+    db.entries.filter(e => !e._uncatalogued).map(e => e.productId).filter((v,i,a) => a.indexOf(v)===i).length;
 }
 
 function confirmClearCatalog() {
@@ -1256,14 +1274,14 @@ function confirmClearCatalog() {
 
 async function clearCatalog() {
   closeModal('clear-catalog-modal');
-  db.catalog = [];
   await clearCatalogIDB();
+  db.catalogCount = 0;
   renderCatalog(); updateStats(); showToast('Catálogo limpo', 'error');
 }
 
 // ══════════════════════ REPORT ══════════════════════
-function buildReport() {
-  const rows = getAllEntryRows();
+async function buildReport() {
+  const rows = await getAllEntryRows();
   if (!rows.length) {
     document.getElementById('report-preview').textContent = 'Nenhum lançamento registrado.';
     return;
@@ -1272,19 +1290,21 @@ function buildReport() {
   document.getElementById('report-preview').textContent = lines.join('\n');
 }
 
-function getCSVContent() {
+async function exportCSV() {
   const rows = [['Produto','Código de Barras','SKU','Categoria','Unidade','Data de Validade','Quantidade','Observação']];
-  db.catalog.forEach(p => {
-    const ents = db.entries.filter(e => e.productId === p.id);
-    if (!ents.length) return;
-    ents.sort((a,b) => a.expiry.localeCompare(b.expiry)).forEach(e => {
-      rows.push([p.name, p.barcode, p.sku||'', p.category||'', p.unit||'un', fmtDate(e.expiry), e.qty, '']);
-    });
+  const allCatalog = await getAllCatalogIDB();
+  const catalogMap = new Map(allCatalog.map(p => [p.id, p]));
+  db.entries.filter(e => !e._uncatalogued).forEach(e => {
+    const p = catalogMap.get(e.productId);
+    if (!p) return;
+    rows.push([p.name, p.barcode, p.sku||'', p.category||'', p.unit||'un', fmtDate(e.expiry), e.qty, '']);
   });
   db.entries.filter(e => e._uncatalogued).forEach(e => {
     rows.push(['SEM CADASTRO', e.barcode, '', '', 'un', fmtDate(e.expiry), e.qty, 'Produto não cadastrado no catálogo']);
   });
-  return '\uFEFF' + rows.map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
+  const csv = '\uFEFF' + rows.map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
+  dlFile(getContagemNome()+'.csv', csv, 'text/csv;charset=utf-8');
+  showToast('CSV exportado ✓','success');
 }
 
 function getContagemNome() {
@@ -1297,7 +1317,7 @@ function saveContagemNome() {
 
 async function sendToDrive() {
   const nome = getContagemNome();
-  const rows = getAllEntryRows();
+  const rows = await getAllEntryRows();
   if (!rows.length) { showToast('Nenhum lançamento para exportar!', 'error'); return; }
 
   const txt1 = rows.map(r => `${r.barcode}|${r.name}|${expiryToShort(r.expiry)}|${r.qty}`).join('\r\n');
@@ -1325,46 +1345,70 @@ async function sendToDrive() {
   }
 }
 
-function exportTXT() {
+async function exportTXT() {
   const nome = getContagemNome();
-  const rows = getAllEntryRows();
+  const rows = await getAllEntryRows();
   if (!rows.length) { showToast('Nenhum lançamento para exportar!', 'error'); return; }
 
-  // ── Arquivo 1: 4 colunas separadas por | ──
-  // barcode|nome|validade(DD-MM-AA)|quantidade
-  const txt1 = rows.map(r => {
-    const valFormatted = expiryToShort(r.expiry); // YYYY-MM-DD → DD-MM-YY
-    return `${r.barcode}|${r.name}|${valFormatted}|${r.qty}`;
-  }).join('\r\n');
+  const txt1 = rows.map(r => `${r.barcode}|${r.name}|${expiryToShort(r.expiry)}|${r.qty}`).join('\r\n');
+  const txt2 = rows.map(r => `${r.barcode.padEnd(14,' ')};${String(r.qty).padStart(5,'0')}`).join('\r\n');
 
-  // ── Arquivo 2: barcode(14 chars, pad direita com espaços);qty(5 dígitos, pad esquerda com zeros) ──
-  const txt2 = rows.map(r => {
-    const barPadded = r.barcode.padEnd(14, ' ');
-    const qtyPadded = String(r.qty).padStart(5, '0');
-    return `${barPadded};${qtyPadded}`;
-  }).join('\r\n');
-
-  // Download com pequeno intervalo entre os dois
   dlFile(nome + '_validade.txt', txt1, 'text/plain;charset=utf-8');
-  setTimeout(() => {
-    dlFile(nome + '.txt', txt2, 'text/plain;charset=utf-8');
-  }, 400);
-
+  setTimeout(() => dlFile(nome + '.txt', txt2, 'text/plain;charset=utf-8'), 400);
   showToast('2 arquivos TXT exportados ✓', 'success');
 }
 
-// Retorna todas as linhas de lançamento (produtos catalogados + sem cadastro)
-function getAllEntryRows() {
+// Retorna todas as linhas de lançamento para exportação
+async function getAllEntryRows() {
   const rows = [];
-  db.catalog.forEach(p => {
-    db.entries.filter(e => e.productId === p.id)
-      .sort((a,b) => (a.expiry||'').localeCompare(b.expiry||''))
-      .forEach(e => rows.push({ barcode: p.barcode, name: p.name, expiry: e.expiry||'', qty: e.qty }));
+  const allCatalog = await getAllCatalogIDB();
+  const catalogMap = new Map(allCatalog.map(p => [p.id, p]));
+  db.entries.filter(e => !e._uncatalogued).forEach(e => {
+    const p = catalogMap.get(e.productId);
+    if (p) rows.push({ barcode: p.barcode, name: p.name, expiry: e.expiry||'', qty: e.qty });
   });
   db.entries.filter(e => e._uncatalogued).forEach(e => {
     rows.push({ barcode: e.barcode, name: '', expiry: e.expiry||'', qty: e.qty });
   });
   return rows;
+}
+
+async function onSkuSearch(query) {
+  const resultsEl = document.getElementById('sku-results');
+  const q = query.trim().toLowerCase();
+  if (!q || q.length < 1) { resultsEl.style.display = 'none'; return; }
+
+  // Use prioritized IDB search
+  const exactSku = [], startsSku = [], containsSku = [], nameMatch = [];
+  const all = await searchCatalogIDB(q, 50);
+  for (const p of all) {
+    const sku  = (p.sku||'').toLowerCase();
+    const name = p.name.toLowerCase();
+    if (sku === q)                      exactSku.push(p);
+    else if (sku && sku.startsWith(q))  startsSku.push(p);
+    else if (sku && sku.includes(q))    containsSku.push(p);
+    else if (name.includes(q))          nameMatch.push(p);
+  }
+  const matches = [...exactSku, ...startsSku, ...containsSku, ...nameMatch].slice(0, 10);
+
+  if (!matches.length) { resultsEl.style.display = 'none'; return; }
+
+  resultsEl.innerHTML = matches.map(p => {
+    const skuTag = p.sku
+      ? `<span style="background:rgba(0,212,170,0.12);color:var(--accent);padding:1px 6px;border-radius:4px;font-size:10px;font-weight:600">SKU ${p.sku}</span>`
+      : '';
+    return `<div onclick="selectSkuResult('${p.barcode.replace(/'/g,"\\'")}','${p.name.replace(/'/g,"\\'")}','${(p.sku||'').replace(/'/g,"\\'")}')"
+      style="padding:10px 14px;cursor:pointer;border-bottom:1px solid var(--border);transition:background 0.15s;display:flex;align-items:center;gap:10px"
+      onmouseenter="this.style.background='rgba(0,212,170,0.08)'"
+      onmouseleave="this.style.background=''">
+      <div style="flex:1;min-width:0">
+        <div style="font-size:13px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.name}</div>
+        <div style="font-size:11px;color:var(--muted);font-family:'JetBrains Mono',monospace;margin-top:2px">${p.barcode}</div>
+      </div>
+      ${skuTag}
+    </div>`;
+  }).join('');
+  resultsEl.style.display = 'block';
 }
 
 // YYYY-MM-DD → DD-MM-YY
@@ -1378,7 +1422,7 @@ function shareWhatsApp() { buildReport(); window.open('https://wa.me/?text='+enc
 function dlFile(name, content, type) { const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([content],{type})); a.download=name; a.click(); URL.revokeObjectURL(a.href); }
 function confirmClearAllData() { openModal('clear-count-modal'); }
 
-function openEditEntry(entryId) {
+async function openEditEntry(entryId) {
   const e = db.entries.find(x => x.id === entryId); if (!e) return;
   document.getElementById('edit-entry-id').value = entryId;
 
@@ -1386,7 +1430,7 @@ function openEditEntry(entryId) {
   if (e._uncatalogued) {
     icon = '❓'; name = 'Sem cadastro'; barcode = e.barcode;
   } else {
-    const prod = db.catalog.find(p => p.id === e.productId);
+    const prod = await getByIdIDB(e.productId);
     if (prod) { icon = catEmoji(prod.category); name = prod.name; barcode = prod.barcode; }
   }
 
@@ -1457,20 +1501,16 @@ function parseDate(str) {
 
 // ══════════════════════ INIT ══════════════════════
 (async () => {
-  // Open IndexedDB
+  // Open IDB — fast, just opens the connection
   idb = await openIDB();
 
-  // Load catalog from IDB
-  db.catalog = await loadCatalogFromIDB();
-
-  // Migrate old localStorage catalog if exists
+  // Migrate old localStorage catalog if exists (one-time)
   const old = localStorage.getItem('estoquemax_v2');
   if (old) {
     try {
       const parsed = JSON.parse(old);
-      if (parsed.catalog && parsed.catalog.length > 0 && db.catalog.length === 0) {
-        db.catalog = parsed.catalog;
-        await saveCatalogToIDB(db.catalog);
+      if (parsed.catalog && parsed.catalog.length > 0) {
+        await saveCatalogToIDB(parsed.catalog);
       }
       if (parsed.entries) {
         localStorage.setItem('estoquemax_entries', JSON.stringify(parsed.entries));
@@ -1479,13 +1519,16 @@ function parseDate(str) {
     localStorage.removeItem('estoquemax_v2');
   }
 
-  // Load entries from localStorage (small data, fast)
+  // Load entries (small, fast)
   try {
     const savedEntries = localStorage.getItem('estoquemax_entries');
     if (savedEntries) db.entries = JSON.parse(savedEntries);
   } catch(e) { db.entries = []; }
 
-  // Render
+  // Get catalog count only (no data loading)
+  db.catalogCount = await countCatalogIDB();
+
+  // Render immediately — no waiting for 63k records
   renderCountList();
   updateStats();
   document.getElementById('search-btn').style.display = 'flex';
