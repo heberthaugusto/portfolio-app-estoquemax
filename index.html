@@ -637,12 +637,12 @@ function searchCatalogIDB(query, limit = 20) {
     req.onsuccess = e => {
       const cursor = e.target.result;
       if (!cursor) { resolve(results); return; }
-      if (results.length >= limit * 3) { resolve(results); return; } // gather extra for priority sort
       const p = cursor.value;
       const name = p.name.toLowerCase();
       const bc   = p.barcode.toLowerCase();
       const sku  = (p.sku||'').toLowerCase();
       if (name.includes(q) || bc.includes(q) || sku.includes(q)) results.push(p);
+      // Keep scanning all records so we don't miss the exact SKU match
       cursor.continue();
     };
     req.onerror = e => reject(e.target.error);
@@ -1384,22 +1384,33 @@ async function onSkuSearch(query) {
   const q = query.trim().toLowerCase();
   if (!q || q.length < 1) { resultsEl.style.display = 'none'; return; }
 
-  // Use prioritized IDB search
-  const exactSku = [], startsSku = [], containsSku = [], nameMatch = [];
-  const all = await searchCatalogIDB(q, 50);
-  for (const p of all) {
+  // Get ALL matches from IDB (full scan to guarantee finding exact SKU)
+  const all = await searchCatalogIDB(q);
+
+  // Priority sort:
+  // 1. SKU exact match
+  // 2. SKU starts with query
+  // 3. SKU contains query
+  // 4. Barcode exact
+  // 5. Name starts with query
+  // 6. Name/barcode contains query
+  function priority(p) {
     const sku  = (p.sku||'').toLowerCase();
     const name = p.name.toLowerCase();
-    if (sku === q)                      exactSku.push(p);
-    else if (sku && sku.startsWith(q))  startsSku.push(p);
-    else if (sku && sku.includes(q))    containsSku.push(p);
-    else if (name.includes(q))          nameMatch.push(p);
+    const bc   = p.barcode.toLowerCase();
+    if (sku === q)             return 0;
+    if (sku.startsWith(q))    return 1;
+    if (sku.includes(q))      return 2;
+    if (bc === q)              return 3;
+    if (name.startsWith(q))   return 4;
+    return 5;
   }
-  const matches = [...exactSku, ...startsSku, ...containsSku, ...nameMatch].slice(0, 10);
 
-  if (!matches.length) { resultsEl.style.display = 'none'; return; }
+  const sorted = all.sort((a, b) => priority(a) - priority(b)).slice(0, 10);
 
-  resultsEl.innerHTML = matches.map(p => {
+  if (!sorted.length) { resultsEl.style.display = 'none'; return; }
+
+  resultsEl.innerHTML = sorted.map(p => {
     const skuTag = p.sku
       ? `<span style="background:rgba(0,212,170,0.12);color:var(--accent);padding:1px 6px;border-radius:4px;font-size:10px;font-weight:600">SKU ${p.sku}</span>`
       : '';
