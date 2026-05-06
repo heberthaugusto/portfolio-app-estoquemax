@@ -627,16 +627,22 @@ function countCatalogIDB() {
   });
 }
 
-// Search IDB using cursor — returns up to `limit` results matching fn
-function searchCatalogIDB(filterFn, limit = 20) {
+// Search IDB using cursor — accepts a query string, returns up to `limit` matching products
+function searchCatalogIDB(query, limit = 20) {
   return new Promise((resolve, reject) => {
+    const q = query.toLowerCase();
     const results = [];
     const tx  = idb.transaction('catalog','readonly');
     const req = tx.objectStore('catalog').openCursor();
     req.onsuccess = e => {
       const cursor = e.target.result;
-      if (!cursor || results.length >= limit) { resolve(results); return; }
-      if (filterFn(cursor.value)) results.push(cursor.value);
+      if (!cursor) { resolve(results); return; }
+      if (results.length >= limit * 3) { resolve(results); return; } // gather extra for priority sort
+      const p = cursor.value;
+      const name = p.name.toLowerCase();
+      const bc   = p.barcode.toLowerCase();
+      const sku  = (p.sku||'').toLowerCase();
+      if (name.includes(q) || bc.includes(q) || sku.includes(q)) results.push(p);
       cursor.continue();
     };
     req.onerror = e => reject(e.target.error);
