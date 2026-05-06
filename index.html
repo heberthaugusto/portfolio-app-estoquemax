@@ -596,7 +596,7 @@ let searchVisible = false;
 // ══════════════════════ INDEXEDDB ══════════════════════
 function openIDB() {
   return new Promise((resolve, reject) => {
-    const req = indexedDB.open('estoquemax', 3);
+    const req = indexedDB.open('estoquemax', 4);
     req.onupgradeneeded = e => {
       const d = e.target.result;
       if (!d.objectStoreNames.contains('catalog')) {
@@ -627,22 +627,43 @@ function countCatalogIDB() {
   });
 }
 
-// Search IDB using cursor — accepts a query string, returns up to `limit` matching products
+// Fast index-based search — uses IDB indexes, no full scan needed
+function searchByIndexPrefix(indexName, prefix, limit) {
+  return new Promise((resolve, reject) => {
+    const results = [];
+    const tx    = idb.transaction('catalog','readonly');
+    const idx   = tx.objectStore('catalog').index(indexName);
+    // IDBKeyRange to match entries >= prefix and < prefix + high char
+    const range = IDBKeyRange.bound(prefix, prefix + '\uffff', false, true);
+    const req   = idx.openCursor(range);
+    req.onsuccess = e => {
+      const cursor = e.target.result;
+      if (!cursor || results.length >= limit) { resolve(results); return; }
+      results.push(cursor.value);
+      cursor.continue();
+    };
+    req.onerror = e => reject(e.target.error);
+  });
+}
+
+// Search IDB using cursor — limited scan for general contains search
 function searchCatalogIDB(query, limit = 20) {
   return new Promise((resolve, reject) => {
     const q = query.toLowerCase();
     const results = [];
+    const seen = new Set();
     const tx  = idb.transaction('catalog','readonly');
     const req = tx.objectStore('catalog').openCursor();
     req.onsuccess = e => {
       const cursor = e.target.result;
-      if (!cursor) { resolve(results); return; }
+      if (!cursor || results.length >= limit) { resolve(results); return; }
       const p = cursor.value;
       const name = p.name.toLowerCase();
       const bc   = p.barcode.toLowerCase();
       const sku  = (p.sku||'').toLowerCase();
-      if (name.includes(q) || bc.includes(q) || sku.includes(q)) results.push(p);
-      // Keep scanning all records so we don't miss the exact SKU match
+      if ((name.includes(q) || bc.includes(q) || sku.includes(q)) && !seen.has(p.id)) {
+        seen.add(p.id); results.push(p);
+      }
       cursor.continue();
     };
     req.onerror = e => reject(e.target.error);
@@ -1384,38 +1405,40 @@ async function onSkuSearch(query) {
   const q = query.trim().toLowerCase();
   if (!q || q.length < 1) { resultsEl.style.display = 'none'; return; }
 
-  // Get ALL matches from IDB (full scan to guarantee finding exact SKU)
-  const all = await searchCatalogIDB(q);
+  // Show loading indicator
+  resultsEl.innerHTML = `<div style="padding:12px 14px;font-size:12px;color:var(--muted)">🔍 Buscando...</div>`;
+  resultsEl.style.display = 'block';
 
-  // Priority sort:
-  // 1. SKU exact match
-  // 2. SKU starts with query
-  // 3. SKU contains query
-  // 4. Barcode exact
-  // 5. Name starts with query
-  // 6. Name/barcode contains query
-  function priority(p) {
-    const sku  = (p.sku||'').toLowerCase();
-    const name = p.name.toLowerCase();
-    const bc   = p.barcode.toLowerCase();
-    if (sku === q)             return 0;
-    if (sku.startsWith(q))    return 1;
-    if (sku.includes(q))      return 2;
-    if (bc === q)              return 3;
-    if (name.startsWith(q))   return 4;
-    return 5;
-  }
+  const exactSku = [], startsSku = [], containsSku = [], nameMatch = [];
 
-  const sorted = all.sort((a, b) => priority(a) - priority(b)).slice(0, 10);
+  await new Promise((resolve, reject) => {
+    const tx  = idb.transaction('catalog','readonly');
+    const req = tx.objectStore('catalog').openCursor();
+    req.onsuccess = e => {
+      const cursor = e.target.result;
+      if (!cursor) { resolve(); return; }
+      const p   = cursor.value;
+      const sku  = (p.sku||'').toLowerCase();
+      const name = p.name.toLowerCase();
+      const bc   = p.barcode.toLowerCase();
+      if      (sku === q)           exactSku.push(p);
+      else if (sku.startsWith(q))   startsSku.push(p);
+      else if (sku.includes(q))     containsSku.push(p);
+      else if (name.includes(q) || bc.includes(q)) nameMatch.push(p);
+      cursor.continue();
+    };
+    req.onerror = e => reject(e.target.error);
+  });
 
-  if (!sorted.length) { resultsEl.style.display = 'none'; return; }
+  const results = [...exactSku, ...startsSku, ...containsSku, ...nameMatch].slice(0, 10);
+  if (!results.length) { resultsEl.style.display = 'none'; return; }
 
-  resultsEl.innerHTML = sorted.map(p => {
+  resultsEl.innerHTML = results.map(p => {
     const skuTag = p.sku
       ? `<span style="background:rgba(0,212,170,0.12);color:var(--accent);padding:1px 6px;border-radius:4px;font-size:10px;font-weight:600">SKU ${p.sku}</span>`
       : '';
     return `<div onclick="selectSkuResult('${p.barcode.replace(/'/g,"\\'")}','${p.name.replace(/'/g,"\\'")}','${(p.sku||'').replace(/'/g,"\\'")}')"
-      style="padding:10px 14px;cursor:pointer;border-bottom:1px solid var(--border);transition:background 0.15s;display:flex;align-items:center;gap:10px"
+      style="padding:10px 14px;cursor:pointer;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px"
       onmouseenter="this.style.background='rgba(0,212,170,0.08)'"
       onmouseleave="this.style.background=''">
       <div style="flex:1;min-width:0">
