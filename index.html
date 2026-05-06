@@ -979,6 +979,14 @@ function addDirectEntry(productId) {
 // ══════════════════════ SCANNER ══════════════════════
 function openScanner(mode) {
   scannerMode = mode;
+  // Clear any leftover content in qr-reader before init
+  const qrEl = document.getElementById('qr-reader');
+  qrEl.innerHTML = '';
+  // Reset manual entry UI
+  qrEl.style.display = 'block';
+  document.getElementById('manual-entry-area').style.display = 'none';
+  document.getElementById('scanner-buttons').style.display = 'flex';
+  document.getElementById('scanner-title').textContent = '📷 Escanear Código de Barras';
   openModal('scanner-modal');
   setTimeout(() => {
     scanner = new Html5Qrcode('qr-reader');
@@ -1003,7 +1011,9 @@ async function onScan(code) {
 }
 
 function stopScanner() {
-  if (scanner) { scanner.stop().catch(()=>{}); scanner = null; }
+  if (scanner) {
+    scanner.stop().then(() => { scanner.clear(); scanner = null; }).catch(() => { scanner = null; });
+  }
   closeModal('scanner-modal');
 }
 
