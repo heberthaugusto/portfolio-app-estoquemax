@@ -1130,7 +1130,13 @@ function addCountEntry() {
   saveEntries(); updateStats(); renderCountList();
   closeModal('count-modal');
   countProduct = null;
-  setTimeout(() => openCountScanner(), 600);
+  // Clear manual entry fields for next scan
+  const skuInput = document.getElementById('sku-search-input');
+  const bcInput  = document.getElementById('manual-barcode');
+  if (skuInput) skuInput.value = '';
+  if (bcInput)  bcInput.value  = '';
+  document.getElementById('sku-results').style.display = 'none';
+  setTimeout(() => openCountScanner(), 400);
 }
 
 async function renderCountList() {
