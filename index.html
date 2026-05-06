@@ -596,7 +596,7 @@ let searchVisible = false;
 // ══════════════════════ INDEXEDDB ══════════════════════
 function openIDB() {
   return new Promise((resolve, reject) => {
-    const req = indexedDB.open('estoquemax', 5);
+    const req = indexedDB.open('estoquemax', 6);
     req.onupgradeneeded = e => {
       const d = e.target.result;
       if (!d.objectStoreNames.contains('catalog')) {
@@ -605,11 +605,12 @@ function openIDB() {
         store.createIndex('sku',     'sku',     { unique: false });
         store.createIndex('name',    'name',    { unique: false });
       } else {
-        // Add indexes if upgrading
+        // Ensure indexes exist on upgrade — recreate to reindex existing data
         const store = e.target.transaction.objectStore('catalog');
-        if (!store.indexNames.contains('barcode')) store.createIndex('barcode','barcode',{unique:false});
-        if (!store.indexNames.contains('sku'))     store.createIndex('sku','sku',{unique:false});
-        if (!store.indexNames.contains('name'))     store.createIndex('name','name',{unique:false});
+        ['barcode','sku','name'].forEach(idx => {
+          if (store.indexNames.contains(idx)) store.deleteIndex(idx);
+          store.createIndex(idx, idx, {unique: false});
+        });
       }
     };
     req.onsuccess = e => resolve(e.target.result);
@@ -670,19 +671,39 @@ function searchCatalogIDB(query, limit = 20) {
   });
 }
 
-// Get one product by barcode — reliable cursor scan
-function findByBarcodeIDB(barcode) {
+// Get one product by barcode — tries index first (fast), cursor fallback
+async function findByBarcodeIDB(barcode) {
+  const norm = normCode(barcode);
+  const variants = [...new Set([barcode, norm,
+    norm.length < 13 ? norm.padStart(13,'0') : null,
+    norm.length < 14 ? norm.padStart(14,'0') : null,
+  ].filter(Boolean))];
+
+  // Try index (instant if data was imported with index)
+  const byIndex = await new Promise((resolve, reject) => {
+    let i = 0;
+    const tx = idb.transaction('catalog','readonly');
+    const store = tx.objectStore('catalog');
+    const tryNext = () => {
+      if (i >= variants.length) { resolve(null); return; }
+      const req = store.index('barcode').get(variants[i++]);
+      req.onsuccess = e => e.target.result ? resolve(e.target.result) : tryNext();
+      req.onerror   = () => tryNext();
+    };
+    tryNext();
+    tx.onerror = e => reject(e.target.error);
+  });
+  if (byIndex) return byIndex;
+
+  // Fallback: full cursor scan (for data imported before index)
   return new Promise((resolve, reject) => {
-    const norm = normCode(barcode);
-    const tx   = idb.transaction('catalog','readonly');
-    const req  = tx.objectStore('catalog').openCursor();
+    const tx  = idb.transaction('catalog','readonly');
+    const req = tx.objectStore('catalog').openCursor();
     req.onsuccess = e => {
       const cursor = e.target.result;
       if (!cursor) { resolve(null); return; }
-      const stored = cursor.value.barcode;
-      if (stored === barcode || normCode(stored) === norm) {
-        resolve(cursor.value); return;
-      }
+      const s = cursor.value.barcode;
+      if (s === barcode || normCode(s) === norm) { resolve(cursor.value); return; }
       cursor.continue();
     };
     req.onerror = e => reject(e.target.error);
