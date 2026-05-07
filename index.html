@@ -1472,7 +1472,7 @@ async function buildReport() {
     document.getElementById('report-preview').textContent = 'Nenhum lançamento registrado.';
     return;
   }
-  const lines = rows.map(r => `${r.barcode}|${r.name}|${expiryToShort(r.expiry)}|${r.qty}`);
+  const lines = rows.map(r => `${r.sku}|${r.barcode}|${r.name}|${expiryToShort(r.expiry)}|${r.qty}`);
   document.getElementById('report-preview').textContent = lines.join('\n');
 }
 
@@ -1509,7 +1509,7 @@ async function sendToDrive() {
   // Save to history before exporting
   saveToHistory(nome, db.entries);
 
-  const txt1 = rows.map(r => `${r.barcode}|${r.name}|${expiryToShort(r.expiry)}|${r.qty}`).join('\r\n');
+  const txt1 = rows.map(r => `${r.sku}|${r.barcode}|${r.name}|${expiryToShort(r.expiry)}|${r.qty}`).join('\r\n');
   const txt2 = rows.map(r => `${r.barcode.padEnd(14,' ')};${String(r.qty).padStart(5,'0')}`).join('\r\n');
 
   const file1 = new File([txt1], nome + '_validade.txt', { type: 'text/plain' });
@@ -1542,7 +1542,7 @@ async function exportTXT() {
   // Save to history before exporting
   saveToHistory(nome, db.entries);
 
-  const txt1 = rows.map(r => `${r.barcode}|${r.name}|${expiryToShort(r.expiry)}|${r.qty}`).join('\r\n');
+  const txt1 = rows.map(r => `${r.sku}|${r.barcode}|${r.name}|${expiryToShort(r.expiry)}|${r.qty}`).join('\r\n');
   const txt2 = rows.map(r => `${r.barcode.padEnd(14,' ')};${String(r.qty).padStart(5,'0')}`).join('\r\n');
 
   dlFile(nome + '_validade.txt', txt1, 'text/plain;charset=utf-8');
@@ -1557,10 +1557,10 @@ async function getAllEntryRows() {
   const catalogMap = new Map(allCatalog.map(p => [p.id, p]));
   db.entries.filter(e => !e._uncatalogued).forEach(e => {
     const p = catalogMap.get(e.productId);
-    if (p) rows.push({ barcode: p.barcode, name: p.name, expiry: e.expiry||'', qty: e.qty });
+    if (p) rows.push({ sku: p.sku||'', barcode: p.barcode, name: p.name, expiry: e.expiry||'', qty: e.qty });
   });
   db.entries.filter(e => e._uncatalogued).forEach(e => {
-    rows.push({ barcode: e.barcode, name: '', expiry: e.expiry||'', qty: e.qty });
+    rows.push({ sku: '', barcode: e.barcode, name: '', expiry: e.expiry||'', qty: e.qty });
   });
   return rows;
 }
