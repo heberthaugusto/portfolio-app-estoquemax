@@ -188,6 +188,19 @@
   .divider { height: 1px; background: var(--border); margin: 12px 0; }
   .flex { display: flex; } .gap-8 { gap: 8px; } .flex-1 { flex: 1; }
 
+  /* History items */
+  .hist-item {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 14px 16px;
+    margin-bottom: 8px; display: flex; align-items: center; gap: 12px;
+    cursor: pointer; transition: border-color 0.15s;
+  }
+  .hist-item:active { border-color: var(--accent); }
+  .hist-icon { width: 40px; height: 40px; background: var(--bg3); border-radius: 10px; display:flex; align-items:center; justify-content:center; font-size:20px; flex-shrink:0; }
+  .hist-info { flex: 1; min-width: 0; }
+  .hist-name { font-size: 15px; font-weight: 700; font-family: 'JetBrains Mono', monospace; }
+  .hist-meta { font-size: 11px; color: var(--muted); margin-top: 3px; }
+
   /* Lightweight catalog list */
   .cat-list-wrap { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; margin-bottom: 4px; }
   .cat-row { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--border); }
@@ -346,18 +359,21 @@
       </div>
       <div><div class="exp-label">Enviar para o Google Drive</div><div class="exp-desc">Compartilha os arquivos direto no Drive</div></div>
     </div>
-    <div class="export-option" onclick="exportCSV()">
-      <div class="exp-icon" style="background:rgba(0,212,170,0.1)">📊</div>
-      <div><div class="exp-label">Exportar CSV</div><div class="exp-desc">Compatível com Excel e Google Sheets</div></div>
-    </div>
-    <div class="export-option" onclick="shareWhatsApp()">
-      <div class="exp-icon" style="background:rgba(0,201,122,0.1)">💬</div>
-      <div><div class="exp-label">Compartilhar Resumo</div><div class="exp-desc">Enviar via WhatsApp ou outro app</div></div>
-    </div>
   </div>
   <div class="card">
     <div class="section-title">Prévia do Relatório</div>
     <div id="report-preview" style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted);line-height:1.8;white-space:pre-wrap;max-height:320px;overflow-y:auto;"></div>
+  </div>
+</div>
+
+<!-- ═══ TELA: HISTÓRICO ═══ -->
+<div id="screen-historico" class="screen">
+  <div class="section-title" style="margin-bottom:8px">Últimas 20 Contagens Exportadas</div>
+  <div id="historico-list"></div>
+  <div id="historico-empty" class="empty-state" style="display:none">
+    <div class="emoji">🕐</div>
+    <h3>Nenhuma contagem no histórico</h3>
+    <p>O histórico é salvo automaticamente ao exportar.</p>
   </div>
 </div>
 
@@ -375,7 +391,31 @@
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
     Exportar
   </button>
+  <button class="nav-btn" id="nav-historico" onclick="switchTab('historico')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+    Histórico
+  </button>
 </nav>
+
+<!-- MODAL: CONFIRMAR CARREGAR HISTÓRICO -->
+<div id="load-history-modal" class="modal-overlay">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div style="text-align:center; margin-bottom:16px">
+      <div style="font-size:44px; margin-bottom:10px">⚠️</div>
+      <div style="font-size:17px; font-weight:700; margin-bottom:8px">Substituir Contagem Atual?</div>
+      <p style="font-size:13px; color:var(--muted); line-height:1.6">
+        Já existe uma contagem em andamento.<br>
+        Ela será <strong style="color:var(--danger)">excluída permanentemente</strong><br>
+        para carregar a contagem do histórico.
+      </p>
+    </div>
+    <div class="flex gap-8">
+      <button class="btn btn-secondary flex-1" onclick="closeModal('load-history-modal')">Cancelar</button>
+      <button class="btn btn-danger flex-1" id="btn-confirm-load-history" onclick="confirmLoadHistory()">Sim, Substituir</button>
+    </div>
+  </div>
+</div>
 
 <!-- MODAL: EDITAR LANÇAMENTO -->
 <div id="edit-entry-modal" class="modal-overlay">
@@ -764,6 +804,84 @@ function saveEntries() {
 function save() { saveEntries(); }
 async function saveCatalogItem(item) { await updateOneInIDB(item); }
 
+// ══════════════════════ HISTÓRICO ══════════════════════
+function getHistory() {
+  try { return JSON.parse(localStorage.getItem('estoquemax_history') || '[]'); }
+  catch(e) { return []; }
+}
+
+function saveToHistory(name, entries) {
+  let history = getHistory();
+  // Add new entry at the beginning
+  history.unshift({
+    id: Date.now().toString(),
+    name: name || 'Sem nome',
+    date: new Date().toISOString(),
+    entries: JSON.parse(JSON.stringify(entries)) // deep copy
+  });
+  // Keep only last 20
+  history = history.slice(0, 20);
+  localStorage.setItem('estoquemax_history', JSON.stringify(history));
+}
+
+let pendingHistoryId = null;
+
+function renderHistorico() {
+  const history = getHistory();
+  const list = document.getElementById('historico-list');
+  const empty = document.getElementById('historico-empty');
+
+  if (!history.length) {
+    list.innerHTML = '';
+    empty.style.display = 'block';
+    return;
+  }
+  empty.style.display = 'none';
+
+  list.innerHTML = history.map(h => {
+    const d = new Date(h.date);
+    const dateStr = d.toLocaleDateString('pt-BR') + ' ' + d.toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'});
+    const count = h.entries.length;
+    return `<div class="hist-item" onclick="requestLoadHistory('${h.id}')">
+      <div class="hist-icon">🕐</div>
+      <div class="hist-info">
+        <div class="hist-name">${h.name}</div>
+        <div class="hist-meta">${dateStr} &nbsp;·&nbsp; ${count} lançamento${count !== 1 ? 's' : ''}</div>
+      </div>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16" style="color:var(--muted);flex-shrink:0"><path d="M9 18l6-6-6-6"/></svg>
+    </div>`;
+  }).join('');
+}
+
+function requestLoadHistory(id) {
+  pendingHistoryId = id;
+  if (db.entries.length > 0) {
+    openModal('load-history-modal');
+  } else {
+    confirmLoadHistory();
+  }
+}
+
+function confirmLoadHistory() {
+  closeModal('load-history-modal');
+  const history = getHistory();
+  const item = history.find(h => h.id === pendingHistoryId);
+  if (!item) return;
+
+  // Restore entries and contagem name
+  db.entries = item.entries;
+  saveEntries();
+  updateStats();
+
+  // Set contagem name
+  const nameEl = document.getElementById('contagem-nome');
+  if (nameEl) { nameEl.value = item.name; saveContagemNome(); }
+
+  pendingHistoryId = null;
+  switchTab('contagem');
+  showToast(`Contagem "${item.name}" carregada ✓`, 'success');
+}
+
 // Get single product by id
 function getByIdIDB(id) {
   return new Promise((resolve, reject) => {
@@ -831,6 +949,7 @@ function switchTab(tab) {
   if (tab === 'catalogo') renderCatalog();
   if (tab === 'contagem') { renderCountList(); resetCountUI(); }
   if (tab === 'relatorio') buildReport();
+  if (tab === 'historico') renderHistorico();
 }
 
 function toggleSearch() {
@@ -1387,6 +1506,9 @@ async function sendToDrive() {
   const rows = await getAllEntryRows();
   if (!rows.length) { showToast('Nenhum lançamento para exportar!', 'error'); return; }
 
+  // Save to history before exporting
+  saveToHistory(nome, db.entries);
+
   const txt1 = rows.map(r => `${r.barcode}|${r.name}|${expiryToShort(r.expiry)}|${r.qty}`).join('\r\n');
   const txt2 = rows.map(r => `${r.barcode.padEnd(14,' ')};${String(r.qty).padStart(5,'0')}`).join('\r\n');
 
@@ -1416,6 +1538,9 @@ async function exportTXT() {
   const nome = getContagemNome();
   const rows = await getAllEntryRows();
   if (!rows.length) { showToast('Nenhum lançamento para exportar!', 'error'); return; }
+
+  // Save to history before exporting
+  saveToHistory(nome, db.entries);
 
   const txt1 = rows.map(r => `${r.barcode}|${r.name}|${expiryToShort(r.expiry)}|${r.qty}`).join('\r\n');
   const txt2 = rows.map(r => `${r.barcode.padEnd(14,' ')};${String(r.qty).padStart(5,'0')}`).join('\r\n');
