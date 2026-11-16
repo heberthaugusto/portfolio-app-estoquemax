@@ -1,4 +1,4 @@
-# 📦 EstoqueMax — Aplicativo de Controle de Inventário
+# 📦 EstoqueMax - Aplicativo de Controle de Inventário
 
 > Aplicativo mobile desenvolvido para realizar coleta e controle de estoque com leitura de código de barras pela câmera, suporte a múltiplas datas de validade por produto e exportação de arquivos para integração com sistemas de gestão (ERP/WMS).
 
@@ -22,15 +22,15 @@
 
 ## 🎯 Sobre o Projeto
 
-O **EstoqueMax** nasceu de uma necessidade real identificada durante o processo de recebimento e controle de mercadorias: os aplicativos de inventário disponíveis não permitem registrar o **mesmo produto com múltiplas datas de validade distintas** em uma única coleta — ao lançar uma segunda validade, a anterior era substituída.
+O **EstoqueMax** nasceu de uma necessidade real identificada durante o processo de recebimento e controle de mercadorias: os aplicativos de inventário disponíveis não permitem registrar o **mesmo produto com múltiplas datas de validade distintas** em uma única coleta - ao lançar uma segunda validade, a anterior era substituída.
 
 ### Casos de uso
 
-**Recebimento de mercadoria** — ao receber um lote, o operador escaneia cada produto com a câmera, informa a quantidade recebida e a data de validade estampada na embalagem. Se o mesmo produto chegar com lotes de datas diferentes (comum em produtos alimentícios e de higiene), cada validade é registrada separadamente. Ao final, o app exporta os arquivos prontos para importação no sistema de gestão.
+**Recebimento de mercadoria**: ao receber um lote, o operador escaneia cada produto com a câmera, informa a quantidade recebida e a data de validade estampada na embalagem. Se o mesmo produto chegar com lotes de datas diferentes (comum em produtos alimentícios e de higiene), cada validade é registrada separadamente. Ao final, o app exporta os arquivos prontos para importação no sistema de gestão.
 
-**Controle de validades** — o arquivo `_validade.txt` alimenta diretamente planilhas ou sistemas de controle de vencimento, com uma linha por lote de validade, permitindo rastrear exatamente quais unidades vencem em cada data e planejar a rotatividade do estoque com precisão.
+**Controle de validades**: o arquivo `_validade.txt` alimenta diretamente planilhas ou sistemas de controle de vencimento, com uma linha por lote de validade, permitindo rastrear exatamente quais unidades vencem em cada data e planejar a rotatividade do estoque com precisão.
 
-**Inventário periódico** — o operador percorre as prateleiras escaneando os produtos. O app identifica automaticamente cada item pelo catálogo importado, registra a quantidade e gera dois arquivos ao final: um com detalhamento por validade e outro no formato de coletor para importação no ERP.
+**Inventário periódico**: o operador percorre as prateleiras escaneando os produtos. O app identifica automaticamente cada item pelo catálogo importado, registra a quantidade e gera dois arquivos ao final: um com detalhamento por validade e outro no formato de coletor para importação no ERP.
 
 ---
 
@@ -39,26 +39,26 @@ O **EstoqueMax** nasceu de uma necessidade real identificada durante o processo 
 ### 📷 Coleta de Estoque
 - Leitura automática de código de barras pela câmera traseira (EAN-13, EAN-8, Code 128)
 - Identificação instantânea do produto pelo catálogo importado via IndexedDB
-- **Detecção inteligente de códigos fracionados** — produtos cujo código impresso segue o padrão `2[SKU]0000XX` são identificados automaticamente pelo fragmento de SKU, sem necessidade de inserção manual
-- Inserção manual de código com busca por **SKU ou nome** — prioriza correspondência exata de SKU
-- **Múltiplas validades** por produto — cada validade gera uma linha separada no arquivo exportado
-- Data de validade **opcional** — suporta produtos sem validade
-- 💡 **Lanterna integrada** — botão para acender/apagar a lanterna do celular diretamente na tela da câmera; desliga automaticamente ao fechar a câmera
+- **Detecção inteligente de códigos fracionados** - produtos cujo código impresso segue o padrão `2[SKU]0000XX` são identificados automaticamente pelo fragmento de SKU, sem necessidade de inserção manual
+- Inserção manual de código com busca por **SKU ou nome** - prioriza correspondência exata de SKU
+- **Múltiplas validades** por produto - cada validade gera uma linha separada no arquivo exportado
+- Data de validade **opcional** - suporta produtos sem validade
+- 💡 **Lanterna integrada** - botão para acender/apagar a lanterna do celular diretamente na tela da câmera; desliga automaticamente ao fechar a câmera
 - Edição e exclusão de lançamentos após registro
 - Card com **totais em tempo real**: quantidade de produtos distintos e total de unidades contadas
 - Botão flutuante de acesso rápido ao scanner
 
 ### 📂 Catálogo de Produtos
-- Importação via arquivo `.txt` com separador `|` — testado com **63.000+ produtos**
-- Importação assíncrona em lotes com barra de progresso — sem travamento da UI
-- **Importação incremental** — produtos já cadastrados são ignorados automaticamente
+- Importação via arquivo `.txt` com separador `|` - testado com **63.000+ produtos**
+- Importação assíncrona em lotes com barra de progresso - sem travamento da UI
+- **Importação incremental** - produtos já cadastrados são ignorados automaticamente
 - Cadastro manual com código de barras, nome, SKU, categoria e unidade
 - Busca em tempo real por nome, código de barras ou SKU (IndexedDB com índices)
 
 ### 📄 Exportação
 Ao exportar, **dois arquivos `.txt` são gerados simultaneamente**:
 
-**`NOME_validade.txt`** — detalhamento completo, uma linha por lote de validade:
+**`NOME_validade.txt`** - detalhamento completo, uma linha por lote de validade:
 
 | Coluna | Conteúdo | Exemplo |
 |---|---|---|
@@ -73,23 +73,23 @@ Ao exportar, **dois arquivos `.txt` são gerados simultaneamente**:
 572|7896051115090|LEITE CONDENSADO ITAMBE 1KG|04-04-27|60
 ```
 
-**`NOME.txt`** — formato coletor para importação no ERP, quantidades totais por produto:
+**`NOME.txt`** - formato coletor para importação no ERP, quantidades totais por produto:
 
 | Coluna | Conteúdo | Regra de formatação |
 |---|---|---|
-| 1 | Código de barras | 14 caracteres — espaços à direita se menor |
-| 2 | Quantidade total | 5 dígitos — zeros à esquerda · soma todas as validades do produto |
+| 1 | Código de barras | 14 caracteres - espaços à direita se menor |
+| 2 | Quantidade total | 5 dígitos - zeros à esquerda · soma todas as validades do produto |
 
 ```
 7896051115090 ;00108
 ```
 
-Integração com **Google Drive** via Web Share API nativa do Android — um toque para enviar direto para a pasta desejada.
+Integração com **Google Drive** via Web Share API nativa do Android - um toque para enviar direto para a pasta desejada.
 
 ### 🕐 Histórico de Contagens
 - Registro automático das últimas **20 coletas exportadas** com nome, data/hora e quantidade de lançamentos
 - Recarregamento de qualquer coleta anterior diretamente na tela de trabalho
-- Confirmação obrigatória antes de substituir uma contagem em andamento — evita perda acidental de dados
+- Confirmação obrigatória antes de substituir uma contagem em andamento - evita perda acidental de dados
 
 ---
 
@@ -98,13 +98,13 @@ Integração com **Google Drive** via Web Share API nativa do Android — um toq
 | Decisão | Justificativa |
 |---|---|
 | **PWA sem framework** | Instalável como app nativo sem loja de aplicativos. Single-file HTML facilita distribuição, versionamento e deploy via GitHub Pages. |
-| **IndexedDB para catálogo** | localStorage tem limite de ~5 MB — insuficiente para catálogos com 60k+ produtos (~9,5 MB). IndexedDB suporta centenas de MB sem limitação prática. |
+| **IndexedDB para catálogo** | localStorage tem limite de ~5 MB - insuficiente para catálogos com 60k+ produtos (~9,5 MB). IndexedDB suporta centenas de MB sem limitação prática. |
 | **localStorage para contagens** | Lançamentos ativos têm poucos registros. localStorage é síncrono e mais direto para dados pequenos e frequentemente atualizados. |
-| **Índices IDB para busca** | Com 60k+ produtos, cursor scan seria lento. Índices por `barcode`, `sku` e `name` permitem lookup O(log n) — busca instantânea independente do tamanho do catálogo. |
+| **Índices IDB para busca** | Com 60k+ produtos, cursor scan seria lento. Índices por `barcode`, `sku` e `name` permitem lookup O(log n) - busca instantânea independente do tamanho do catálogo. |
 | **Importação assíncrona em lotes** | Processar 60k registros de uma vez trava a UI. Lotes de 2.000 registros com `await new Promise(r => setTimeout(r, 0))` mantêm o browser responsivo e exibem progresso em tempo real. |
 | **Detecção de códigos fracionados** | Produtos com código impresso no padrão `2[SKU]0000XX` são identificados pelo fragmento do SKU sem necessidade de recadastro, com validação por múltiplos critérios para evitar falsos positivos. |
 | **html5-qrcode** | Biblioteca madura para leitura de códigos via câmera no browser. Suporta os principais formatos de código de barras usados no varejo. |
-| **Web Share API** | Permite compartilhar arquivos gerados diretamente para o Google Drive sem intermediários — menos cliques para o usuário final. |
+| **Web Share API** | Permite compartilhar arquivos gerados diretamente para o Google Drive sem intermediários - menos cliques para o usuário final. |
 | **Service Worker** | Cache offline para funcionamento sem internet após instalação. Atualização automática de versão sem necessidade de reinstalar. |
 
 ---
